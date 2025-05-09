@@ -116,12 +116,12 @@ export default function LoansPage() {
       header: "Date",
       cell: ({ row }: any) => {
         const date = row.getValue("startDate");
-        return (
+        return date ? (
           <div className="flex items-center">
             <Calendar className="h-4 w-4 mr-2 text-neutral-400" />
             <span>{formatDate(date)}</span>
           </div>
-        );
+        ) : null;
       },
     },
     {
@@ -129,11 +129,11 @@ export default function LoansPage() {
       header: "Type",
       cell: ({ row }: any) => {
         const type = row.getValue("interestType");
-        return (
+        return type ? (
           <Badge variant="secondary">
             {type.charAt(0).toUpperCase() + type.slice(1)}
           </Badge>
-        );
+        ) : null;
       },
     },
     {
@@ -141,11 +141,11 @@ export default function LoansPage() {
       header: "Status",
       cell: ({ row }: any) => {
         const status = row.getValue("status");
-        return (
+        return status ? (
           <Badge variant={getLoanStatusColor(status)}>
             {status.charAt(0).toUpperCase() + status.slice(1)}
           </Badge>
-        );
+        ) : null;
       },
     },
     {
