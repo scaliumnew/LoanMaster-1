@@ -207,7 +207,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/payments", async (req: Request, res: Response) => {
     try {
-      const validatedData = insertPaymentSchema.parse(req.body);
+      console.log("Payment request body:", req.body);
+      
+      // Process the data to ensure proper types
+      const processedData = {
+        ...req.body,
+        loanId: parseInt(req.body.loanId),
+        installmentId: req.body.installmentId ? parseInt(req.body.installmentId) : null,
+        paymentDate: new Date(req.body.paymentDate)
+      };
+      
+      console.log("Processed payment data:", processedData);
+      
+      const validatedData = insertPaymentSchema.parse(processedData);
+      console.log("Validated payment data:", validatedData);
       
       // Verify loan exists
       const loan = await storage.getLoan(validatedData.loanId);
@@ -265,6 +278,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         preclosureFee
       };
       
+      console.log("Final payment data to be saved:", paymentWithFees);
+      
       // Create payment
       const payment = await storage.createPayment(paymentWithFees);
       
@@ -289,10 +304,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(payment);
     } catch (error) {
+      console.error("Payment creation error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid payment data", errors: error.errors });
+        return res.status(400).json({ 
+          message: "Invalid payment data", 
+          errors: error.errors,
+          details: "Please check all form fields are filled correctly" 
+        });
       }
-      res.status(500).json({ message: "Failed to create payment" });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ message: "Failed to create payment", error: errorMessage });
     }
   });
 

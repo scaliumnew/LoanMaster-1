@@ -303,15 +303,19 @@ export function PaymentForm({
       // Convert the form data to the format expected by the API
       const paymentData = {
         loanId: parseInt(data.loanId),
-        installmentId: data.installmentId ? parseInt(data.installmentId) : undefined,
+        installmentId: data.installmentId && data.installmentId !== "" ? parseInt(data.installmentId) : null,
         amount: data.amount,
         paymentDate: new Date(data.paymentDate).toISOString(),
         paymentType: data.paymentType,
         paymentMethod: data.paymentMethod,
-        notes: data.notes || undefined,
+        notes: data.notes || "",
       };
 
-      await apiRequest("POST", "/api/payments", paymentData);
+      console.log("Submitting payment data:", paymentData);
+      
+      const response = await apiRequest("POST", "/api/payments", paymentData);
+      const result = await response.json();
+      console.log("Payment creation result:", result);
 
       toast({
         title: "Payment recorded",
@@ -327,11 +331,23 @@ export function PaymentForm({
       form.reset();
       onSuccess();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error submitting form:", error);
+      
+      let errorMessage = "Failed to record payment. Please try again.";
+      if (error && error.response) {
+        try {
+          const errorData = await error.response.json();
+          errorMessage = errorData.message || errorData.details || errorMessage;
+          console.log("Server error details:", errorData);
+        } catch (e) {
+          // If we can't parse the error response, use the default message
+        }
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to record payment. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
