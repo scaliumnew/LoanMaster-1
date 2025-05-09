@@ -122,12 +122,20 @@ export default function ReportsPage() {
 
     // Sum up loan amounts by month
     loansData.forEach((loan: any) => {
-      const date = new Date(loan.startDate);
-      const monthName = date.toLocaleString('default', { month: 'short' });
-      const key = `${monthName} ${date.getFullYear()}`;
-      
-      if (monthlyData[key] !== undefined) {
-        monthlyData[key] += parseFloat(loan.amount);
+      if (loan.startDate) {
+        try {
+          const date = new Date(loan.startDate);
+          if (!isNaN(date.getTime())) {
+            const monthName = date.toLocaleString('default', { month: 'short' });
+            const key = `${monthName} ${date.getFullYear()}`;
+            
+            if (monthlyData[key] !== undefined) {
+              monthlyData[key] += parseFloat(loan.amount);
+            }
+          }
+        } catch (error) {
+          console.error("Error processing loan date:", error);
+        }
       }
     });
 
@@ -399,9 +407,17 @@ export default function ReportsPage() {
                       </thead>
                       <tbody className="bg-white divide-y divide-neutral-200">
                         {[...loansData]
-                          .sort((a: any, b: any) => 
-                            new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
-                          )
+                          .sort((a: any, b: any) => {
+                            try {
+                              if (!a.startDate || !b.startDate) return 0;
+                              const dateA = new Date(a.startDate);
+                              const dateB = new Date(b.startDate);
+                              if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) return 0;
+                              return dateB.getTime() - dateA.getTime();
+                            } catch (error) {
+                              return 0;
+                            }
+                          })
                           .slice(0, 10)
                           .map((loan: any) => (
                             <tr key={loan.id} className="hover:bg-neutral-50">
@@ -422,17 +438,21 @@ export default function ReportsPage() {
                               <td className="px-4 py-3 whitespace-nowrap">
                                 <div className="flex items-center">
                                   <Calendar className="h-4 w-4 mr-2 text-neutral-400" />
-                                  {formatDate(loan.startDate)}
+                                  {loan.startDate ? formatDate(loan.startDate) : 'Unknown date'}
                                 </div>
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap">
-                                <Badge variant="primary">
-                                  {loan.interestType.charAt(0).toUpperCase() + loan.interestType.slice(1)}
+                                <Badge variant="secondary">
+                                  {loan.interestType && typeof loan.interestType === 'string' 
+                                    ? loan.interestType.charAt(0).toUpperCase() + loan.interestType.slice(1)
+                                    : 'Unknown'}
                                 </Badge>
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap">
-                                <Badge variant={getLoanStatusColor(loan.status)}>
-                                  {loan.status.charAt(0).toUpperCase() + loan.status.slice(1)}
+                                <Badge variant={loan.status ? getLoanStatusColor(loan.status) : "default"}>
+                                  {loan.status && typeof loan.status === 'string'
+                                    ? loan.status.charAt(0).toUpperCase() + loan.status.slice(1)
+                                    : 'Unknown'}
                                 </Badge>
                               </td>
                             </tr>
