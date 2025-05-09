@@ -216,7 +216,11 @@ export function LoanForm({ isOpen, onClose, onSuccess }: LoanFormProps) {
         status: 'active',
       };
       
-      await apiRequest("POST", "/api/loans", loanData);
+      console.log("Submitting loan data:", loanData);
+      
+      const response = await apiRequest("POST", "/api/loans", loanData);
+      const result = await response.json();
+      console.log("Loan creation result:", result);
       
       toast({
         title: "Loan created",
@@ -226,11 +230,23 @@ export function LoanForm({ isOpen, onClose, onSuccess }: LoanFormProps) {
       form.reset();
       onSuccess();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error submitting form:", error);
+      
+      let errorMessage = "Failed to create loan. Please try again.";
+      if (error && error.response) {
+        try {
+          const errorData = await error.response.json();
+          errorMessage = errorData.message || errorData.details || errorMessage;
+          console.log("Server error details:", errorData);
+        } catch (e) {
+          // If we can't parse the error response, use the default message
+        }
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to create loan. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     }

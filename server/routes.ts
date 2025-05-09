@@ -104,7 +104,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/loans", async (req: Request, res: Response) => {
     try {
-      const validatedData = insertLoanSchema.parse(req.body);
+      console.log("Loan request body:", req.body);
+      
+      // Convert string values to appropriate types
+      const processedData = {
+        ...req.body,
+        clientId: parseInt(req.body.clientId),
+        termLength: parseInt(req.body.termLength),
+        startDate: new Date(req.body.startDate),
+        endDate: new Date(req.body.endDate)
+      };
+      
+      console.log("Processed loan data:", processedData);
+      
+      const validatedData = insertLoanSchema.parse(processedData);
       
       // Verify client exists
       const client = await storage.getClient(validatedData.clientId);
@@ -124,10 +137,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(201).json(loan);
     } catch (error) {
+      console.error("Loan creation error:", error);
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Invalid loan data", errors: error.errors });
+        return res.status(400).json({ 
+          message: "Invalid loan data", 
+          errors: error.errors,
+          details: "Please check all form fields are filled correctly" 
+        });
       }
-      res.status(500).json({ message: "Failed to create loan" });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ message: "Failed to create loan", error: errorMessage });
     }
   });
 
