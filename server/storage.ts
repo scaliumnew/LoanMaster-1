@@ -9,6 +9,8 @@ import {
   type Payment, type InsertPayment
 } from "@shared/schema";
 import { generateLoanNumber } from "./utils";
+import { eq, and, gte, lte, desc, asc } from "drizzle-orm";
+import { db } from "./db";
 
 // Storage interface
 export interface IStorage {
@@ -46,162 +48,112 @@ export interface IStorage {
   getUpcomingInstallments(daysThreshold: number): Promise<(Installment & { loan: Loan; clientName: string })[]>;
 }
 
-export class MemStorage implements IStorage {
-  private clients: Map<number, Client>;
-  private loans: Map<number, Loan>;
-  private installments: Map<number, Installment>;
-  private payments: Map<number, Payment>;
-  private clientIdCounter: number;
-  private loanIdCounter: number;
-  private installmentIdCounter: number;
-  private paymentIdCounter: number;
-
-  constructor() {
-    this.clients = new Map();
-    this.loans = new Map();
-    this.installments = new Map();
-    this.payments = new Map();
-    this.clientIdCounter = 1;
-    this.loanIdCounter = 1;
-    this.installmentIdCounter = 1;
-    this.paymentIdCounter = 1;
-  }
-
+export class DatabaseStorage implements IStorage {
   // Client methods
   async getClients(): Promise<Client[]> {
-    return Array.from(this.clients.values());
+    return await db.select().from(clientsTable).orderBy(desc(clientsTable.id));
   }
 
   async getClient(id: number): Promise<Client | undefined> {
-    return this.clients.get(id);
+    const result = await db.select().from(clientsTable).where(eq(clientsTable.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createClient(client: InsertClient): Promise<Client> {
-    const id = this.clientIdCounter++;
-    const newClient: Client = { 
-      ...client, 
-      id, 
-      createdAt: new Date() 
-    };
-    this.clients.set(id, newClient);
-    return newClient;
+    const result = await db.insert(clientsTable).values(client).returning();
+    return result[0];
   }
 
   async updateClient(id: number, clientUpdate: Partial<InsertClient>): Promise<Client | undefined> {
-    const existingClient = this.clients.get(id);
-    if (!existingClient) return undefined;
-    
-    const updatedClient: Client = { 
-      ...existingClient, 
-      ...clientUpdate 
-    };
-    this.clients.set(id, updatedClient);
-    return updatedClient;
+    const result = await db.update(clientsTable)
+      .set(clientUpdate)
+      .where(eq(clientsTable.id, id))
+      .returning();
+    return result.length > 0 ? result[0] : undefined;
   }
 
   // Loan methods
   async getLoans(): Promise<Loan[]> {
-    return Array.from(this.loans.values());
+    return await db.select().from(loansTable).orderBy(desc(loansTable.id));
   }
 
   async getLoan(id: number): Promise<Loan | undefined> {
-    return this.loans.get(id);
+    const result = await db.select().from(loansTable).where(eq(loansTable.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async getLoansByClientId(clientId: number): Promise<Loan[]> {
-    return Array.from(this.loans.values()).filter(loan => loan.clientId === clientId);
+    return await db.select()
+      .from(loansTable)
+      .where(eq(loansTable.clientId, clientId))
+      .orderBy(desc(loansTable.id));
   }
 
   async createLoan(loan: InsertLoan): Promise<Loan> {
-    const id = this.loanIdCounter++;
-    const loanNumber = generateLoanNumber(id);
-    
-    const newLoan: Loan = {
+    // Prepare loan data with generated loan number
+    const loanData = {
       ...loan,
-      id,
-      loanNumber,
-      createdAt: new Date()
+      loanNumber: generateLoanNumber(Date.now()) // Using timestamp as a base
     };
     
-    this.loans.set(id, newLoan);
-    return newLoan;
+    // Insert and return the loan
+    const result = await db.insert(loansTable).values(loanData).returning();
+    return result[0];
   }
 
   async updateLoan(id: number, loanUpdate: Partial<InsertLoan>): Promise<Loan | undefined> {
-    const existingLoan = this.loans.get(id);
-    if (!existingLoan) return undefined;
-    
-    const updatedLoan: Loan = {
-      ...existingLoan,
-      ...loanUpdate
-    };
-    
-    this.loans.set(id, updatedLoan);
-    return updatedLoan;
+    const result = await db.update(loansTable)
+      .set(loanUpdate)
+      .where(eq(loansTable.id, id))
+      .returning();
+    return result.length > 0 ? result[0] : undefined;
   }
 
   // Installment methods
   async getInstallments(loanId: number): Promise<Installment[]> {
-    return Array.from(this.installments.values())
-      .filter(installment => installment.loanId === loanId)
-      .sort((a, b) => a.installmentNumber - b.installmentNumber);
+    return await db.select()
+      .from(installmentsTable)
+      .where(eq(installmentsTable.loanId, loanId))
+      .orderBy(asc(installmentsTable.installmentNumber));
   }
 
   async getInstallment(id: number): Promise<Installment | undefined> {
-    return this.installments.get(id);
+    const result = await db.select().from(installmentsTable).where(eq(installmentsTable.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createInstallment(installment: InsertInstallment): Promise<Installment> {
-    const id = this.installmentIdCounter++;
-    
-    const newInstallment: Installment = {
-      ...installment,
-      id,
-      createdAt: new Date()
-    };
-    
-    this.installments.set(id, newInstallment);
-    return newInstallment;
+    const result = await db.insert(installmentsTable).values(installment).returning();
+    return result[0];
   }
 
   async updateInstallment(id: number, installmentUpdate: Partial<InsertInstallment>): Promise<Installment | undefined> {
-    const existingInstallment = this.installments.get(id);
-    if (!existingInstallment) return undefined;
-    
-    const updatedInstallment: Installment = {
-      ...existingInstallment,
-      ...installmentUpdate
-    };
-    
-    this.installments.set(id, updatedInstallment);
-    return updatedInstallment;
+    const result = await db.update(installmentsTable)
+      .set(installmentUpdate)
+      .where(eq(installmentsTable.id, id))
+      .returning();
+    return result.length > 0 ? result[0] : undefined;
   }
 
   // Payment methods
   async getPayments(loanId: number): Promise<Payment[]> {
-    return Array.from(this.payments.values())
-      .filter(payment => payment.loanId === loanId)
-      .sort((a, b) => b.paymentDate.getTime() - a.paymentDate.getTime());
+    return await db.select()
+      .from(paymentsTable)
+      .where(eq(paymentsTable.loanId, loanId))
+      .orderBy(desc(paymentsTable.paymentDate));
   }
 
   async getPayment(id: number): Promise<Payment | undefined> {
-    return this.payments.get(id);
+    const result = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
+    return result.length > 0 ? result[0] : undefined;
   }
 
   async createPayment(payment: InsertPayment): Promise<Payment> {
-    const id = this.paymentIdCounter++;
-    
-    const newPayment: Payment = {
-      ...payment,
-      id,
-      createdAt: new Date()
-    };
-    
-    this.payments.set(id, newPayment);
+    const result = await db.insert(paymentsTable).values(payment).returning();
     
     // Update installment status if installmentId is provided
     if (payment.installmentId) {
-      const installment = this.installments.get(payment.installmentId);
+      const installment = await this.getInstallment(payment.installmentId);
       if (installment) {
         const remainingAmount = Number(installment.remainingAmount) - Number(payment.amount);
         let status = 'pending';
@@ -212,107 +164,132 @@ export class MemStorage implements IStorage {
           status = 'partial';
         }
         
-        this.updateInstallment(installment.id, {
+        await this.updateInstallment(installment.id, {
           remainingAmount: remainingAmount.toString() as any,
           status
         });
       }
     }
     
-    return newPayment;
+    return result[0];
   }
 
   // Reports
   async getTotalActiveLoans(): Promise<number> {
-    return Array.from(this.loans.values()).filter(loan => loan.status === 'active').length;
+    const result = await db.select()
+      .from(loansTable)
+      .where(eq(loansTable.status, 'active'));
+    return result.length;
   }
 
   async getTotalDisbursedAmount(): Promise<number> {
-    return Array.from(this.loans.values())
-      .reduce((sum, loan) => sum + Number(loan.amount), 0);
+    const loans = await db.select()
+      .from(loansTable);
+    return loans.reduce((total, loan) => total + Number(loan.amount), 0);
   }
 
   async getOverduePaymentsCount(): Promise<number> {
-    return Array.from(this.installments.values())
-      .filter(installment => installment.status === 'overdue').length;
+    const today = new Date();
+    const result = await db.select()
+      .from(installmentsTable)
+      .where(
+        and(
+          eq(installmentsTable.status, 'overdue')
+        )
+      );
+    return result.length;
   }
 
   async getRecentLoans(limit: number): Promise<(Loan & { clientName: string })[]> {
-    const loansWithClientNames = Array.from(this.loans.values())
-      .map(loan => {
-        const client = this.clients.get(loan.clientId);
-        return {
-          ...loan,
-          clientName: client ? client.name : 'Unknown Client'
-        };
-      })
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const loans = await db.select()
+      .from(loansTable)
+      .orderBy(desc(loansTable.createdAt))
+      .limit(limit);
     
-    return loansWithClientNames.slice(0, limit);
+    return Promise.all(loans.map(async loan => {
+      const client = await this.getClient(loan.clientId);
+      return {
+        ...loan,
+        clientName: client ? client.name : 'Unknown Client'
+      };
+    }));
   }
 
   async getLoansEndingSoon(daysThreshold: number): Promise<(Loan & { clientName: string })[]> {
     const today = new Date();
-    const thresholdDate = new Date(today);
-    thresholdDate.setDate(today.getDate() + daysThreshold);
+    const threshold = new Date();
+    threshold.setDate(today.getDate() + daysThreshold);
     
-    return Array.from(this.loans.values())
-      .filter(loan => {
-        const endDate = new Date(loan.endDate);
-        return loan.status === 'active' && 
-               endDate >= today && 
-               endDate <= thresholdDate;
-      })
-      .map(loan => {
-        const client = this.clients.get(loan.clientId);
-        return {
-          ...loan,
-          clientName: client ? client.name : 'Unknown Client'
-        };
-      });
+    const loans = await db.select()
+      .from(loansTable)
+      .where(
+        and(
+          eq(loansTable.status, 'active'),
+          gte(loansTable.endDate, today),
+          lte(loansTable.endDate, threshold)
+        )
+      )
+      .orderBy(asc(loansTable.endDate));
+    
+    return Promise.all(loans.map(async loan => {
+      const client = await this.getClient(loan.clientId);
+      return {
+        ...loan,
+        clientName: client ? client.name : 'Unknown Client'
+      };
+    }));
   }
 
   async getOverdueInstallments(): Promise<(Installment & { loan: Loan; clientName: string })[]> {
     const today = new Date();
     
-    return Array.from(this.installments.values())
-      .filter(installment => {
-        const dueDate = new Date(installment.dueDate);
-        return dueDate < today && installment.status !== 'paid';
-      })
-      .map(installment => {
-        const loan = this.loans.get(installment.loanId)!;
-        const client = this.clients.get(loan.clientId);
-        return {
-          ...installment,
-          loan,
-          clientName: client ? client.name : 'Unknown Client'
-        };
-      });
+    const overdueInstallments = await db.select()
+      .from(installmentsTable)
+      .where(
+        and(
+          lte(installmentsTable.dueDate, today),
+          eq(installmentsTable.status, 'pending')
+        )
+      )
+      .orderBy(asc(installmentsTable.dueDate));
+    
+    return Promise.all(overdueInstallments.map(async installment => {
+      const loan = await this.getLoan(installment.loanId) as Loan;
+      const client = await this.getClient(loan.clientId);
+      return {
+        ...installment,
+        loan,
+        clientName: client ? client.name : 'Unknown Client'
+      };
+    }));
   }
 
   async getUpcomingInstallments(daysThreshold: number): Promise<(Installment & { loan: Loan; clientName: string })[]> {
     const today = new Date();
-    const thresholdDate = new Date(today);
-    thresholdDate.setDate(today.getDate() + daysThreshold);
+    const threshold = new Date();
+    threshold.setDate(today.getDate() + daysThreshold);
     
-    return Array.from(this.installments.values())
-      .filter(installment => {
-        const dueDate = new Date(installment.dueDate);
-        return installment.status !== 'paid' && 
-               dueDate >= today && 
-               dueDate <= thresholdDate;
-      })
-      .map(installment => {
-        const loan = this.loans.get(installment.loanId)!;
-        const client = this.clients.get(loan.clientId);
-        return {
-          ...installment,
-          loan,
-          clientName: client ? client.name : 'Unknown Client'
-        };
-      });
+    const upcomingInstallments = await db.select()
+      .from(installmentsTable)
+      .where(
+        and(
+          eq(installmentsTable.status, 'pending'),
+          gte(installmentsTable.dueDate, today),
+          lte(installmentsTable.dueDate, threshold)
+        )
+      )
+      .orderBy(asc(installmentsTable.dueDate));
+    
+    return Promise.all(upcomingInstallments.map(async installment => {
+      const loan = await this.getLoan(installment.loanId) as Loan;
+      const client = await this.getClient(loan.clientId);
+      return {
+        ...installment,
+        loan,
+        clientName: client ? client.name : 'Unknown Client'
+      };
+    }));
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
