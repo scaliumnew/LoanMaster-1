@@ -305,7 +305,7 @@ export function PaymentForm({
         loanId: parseInt(data.loanId),
         installmentId: data.installmentId && data.installmentId !== "" ? parseInt(data.installmentId) : null,
         amount: data.amount,
-        paymentDate: new Date(data.paymentDate).toISOString(),
+        paymentDate: data.paymentDate, // Send as is, schema will handle conversion
         paymentType: data.paymentType,
         paymentMethod: data.paymentMethod,
         notes: data.notes || "",

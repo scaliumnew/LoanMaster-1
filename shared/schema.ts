@@ -80,9 +80,21 @@ export const payments = pgTable("payments", {
   createdAt: timestamp("created_at").defaultNow()
 });
 
-export const insertPaymentSchema = createInsertSchema(payments).omit({ 
+// Create base schema and customize it
+const basePaymentSchema = createInsertSchema(payments).omit({ 
   id: true, 
   createdAt: true 
+});
+
+// Create a custom payment schema that can handle string dates correctly
+export const insertPaymentSchema = basePaymentSchema.extend({
+  paymentDate: z.string().or(z.date()).transform(val => {
+    if (typeof val === 'string') {
+      return new Date(val);
+    }
+    return val;
+  }),
+  installmentId: basePaymentSchema.shape.installmentId.nullable()
 });
 
 // Type definitions
