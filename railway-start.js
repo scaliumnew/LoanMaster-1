@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 // This script handles Railway deployment startup
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+const fs = require("fs");
+const path = require("path");
+const { execSync } = require("child_process");
 
-console.log('=== Railway Deployment Startup Script ===');
+console.log("=== Railway Deployment Startup Script ===");
 
 // Function to create directory if it doesn't exist
 function ensureDirectoryExists(dirPath) {
@@ -18,29 +18,33 @@ function ensureDirectoryExists(dirPath) {
 }
 
 // Create necessary directories
-ensureDirectoryExists('./dist');
-ensureDirectoryExists('./database-export');
+ensureDirectoryExists("./dist");
+ensureDirectoryExists("./database-export");
 
 // Function to check if we're in production environment
 function isProduction() {
-  return process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT === 'production';
+  return (
+    process.env.NODE_ENV === "production" ||
+    process.env.RAILWAY_ENVIRONMENT === "production"
+  );
 }
 
 // Create dummy environment variables if needed
 if (!process.env.DATABASE_URL && isProduction()) {
-  console.log('WARNING: No DATABASE_URL found. Setting fallback for startup');
-  process.env.DATABASE_URL = 'postgresql://dummy:dummy@localhost:5432/dummy';
-  process.env.PGHOST = 'localhost';
-  process.env.PGPORT = '5432';
-  process.env.PGUSER = 'dummy';
-  process.env.PGPASSWORD = 'dummy';
-  process.env.PGDATABASE = 'dummy';
+  console.log("WARNING: No DATABASE_URL found. Setting fallback for startup");
+  process.env.DATABASE_URL =
+    "postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@postgres.railway.internal:5432/railway";
+  process.env.PGHOST = "postgres.railway.internal";
+  process.env.PGPORT = "5432";
+  process.env.PGUSER = "postgres";
+  process.env.PGPASSWORD = "YtXeaamwlmLyWgQhjVkcMusInbHPydpB";
+  process.env.PGDATABASE = "railway";
 }
 
 // Create a fallback index.js in the dist folder if it doesn't exist
-const distIndexPath = path.join(__dirname, 'dist', 'index.js');
+const distIndexPath = path.join(__dirname, "dist", "index.js");
 if (!fs.existsSync(distIndexPath)) {
-  console.log('Creating fallback dist/index.js');
+  console.log("Creating fallback dist/index.js");
   const fallbackCode = `
 // Fallback server for Railway deployment
 const express = require('express');
@@ -76,20 +80,22 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('WARNING: Running in fallback mode without database connection');
 });
 `;
-  
+
   ensureDirectoryExists(path.dirname(distIndexPath));
   fs.writeFileSync(distIndexPath, fallbackCode);
 }
 
 // Check for proper build - make sure client dist exists
-const clientDistPath = path.join(__dirname, 'client', 'dist');
+const clientDistPath = path.join(__dirname, "client", "dist");
 if (!fs.existsSync(clientDistPath)) {
-  console.log('Creating fallback client/dist directory');
+  console.log("Creating fallback client/dist directory");
   ensureDirectoryExists(clientDistPath);
-  
+
   // Create a minimal index.html
-  const indexHtmlPath = path.join(clientDistPath, 'index.html');
-  fs.writeFileSync(indexHtmlPath, `
+  const indexHtmlPath = path.join(clientDistPath, "index.html");
+  fs.writeFileSync(
+    indexHtmlPath,
+    `
 <!DOCTYPE html>
 <html>
 <head>
@@ -141,21 +147,22 @@ if (!fs.existsSync(clientDistPath)) {
   </div>
 </body>
 </html>
-  `);
+  `,
+  );
 }
 
 // Now start the application
-console.log('Starting application...');
+console.log("Starting application...");
 
 try {
   // Check if dist/index.js exists, if not just run node directly
-  if (fs.existsSync(path.join(__dirname, 'dist', 'index.js'))) {
-    require('./dist/index.js');
+  if (fs.existsSync(path.join(__dirname, "dist", "index.js"))) {
+    require("./dist/index.js");
   } else {
-    console.log('WARNING: dist/index.js not found, using fallback server');
-    require('./railway-fallback-server.js');
+    console.log("WARNING: dist/index.js not found, using fallback server");
+    require("./railway-fallback-server.js");
   }
 } catch (err) {
-  console.error('Error starting application:', err);
+  console.error("Error starting application:", err);
   process.exit(1);
 }
