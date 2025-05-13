@@ -6,34 +6,72 @@
 // Set production mode
 process.env.NODE_ENV = 'production';
 
-// Check if we're in a Railway environment
-if (process.env.RAILWAY_ENVIRONMENT) {
-  console.log('Detected Railway environment');
+// Store original connection values for debugging
+const originalDbUrl = process.env.DATABASE_URL;
+const originalPgHost = process.env.PGHOST;
+const originalPgPort = process.env.PGPORT;
+
+console.log('Checking database connection configuration...');
+
+// Detect database type and environment
+const isRailwayEnv = !!process.env.RAILWAY_ENVIRONMENT;
+const hasRailwayHost = process.env.DATABASE_URL && 
+                      (process.env.DATABASE_URL.includes('.railway.internal') || 
+                       process.env.PGHOST && process.env.PGHOST.includes('.railway.internal'));
+const hasTemplateVars = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('${{');
+const isNeonDb = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('.neon.tech');
+
+// Log the detection results
+console.log('Database environment detection:', {
+  isRailwayEnvironment: isRailwayEnv,
+  hasRailwayHostname: hasRailwayHost,
+  hasTemplateVariables: hasTemplateVars,
+  isNeonDatabase: isNeonDb,
+  DATABASE_URL: process.env.DATABASE_URL ? '(set but hidden)' : '(not set)',
+  PGHOST: process.env.PGHOST || '(not set)',
+  PGPORT: process.env.PGPORT || '(not set)'
+});
+
+// For Railway environment
+if (isRailwayEnv || hasRailwayHost) {
+  console.log('Setting up for Railway deployment');
   
-  // Try direct database connection if environment variables aren't properly set
-  console.log('Checking database connection configuration...');
-  
-  if (!process.env.DATABASE_URL || 
-      process.env.DATABASE_URL.includes('${{') || 
-      process.env.DATABASE_URL.includes('loanmaster-1.railway.internal')) {
+  // Check if we need to fix the connection string
+  if (hasTemplateVars || hasRailwayHost || !process.env.DATABASE_URL || 
+      (process.env.PGHOST && process.env.PGHOST === process.env.PGPORT)) {
     
-    console.log('DATABASE_URL needs special handling for Railway internal networking');
-    console.log('Current DATABASE_URL:', process.env.DATABASE_URL || '(not set)');
+    console.log('⚠️ DATABASE_URL needs adjustment for Railway internal networking');
+    console.log('⚠️ IMPORTANT: Make sure your PostgreSQL service is named "postgres" in Railway');
     
-    // Use Railway's internal networking host name "postgres" instead of domain names
-    // This follows the Railway documentation for service-to-service communication
+    // Use Railway's internal networking with service name
     process.env.DATABASE_URL = 'postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@postgres:5432/railway';
     process.env.PGSSLMODE = 'disable';
     
-    // Set other PostgreSQL variables for internal networking
+    // Set individual connection variables clearly
     process.env.PGUSER = 'postgres';
     process.env.PGPASSWORD = 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB';
-    process.env.PGHOST = 'postgres'; // Use "postgres" as the host name for internal networking
+    process.env.PGHOST = 'postgres'; // Service name must match in Railway
     process.env.PGPORT = '5432';
     process.env.PGDATABASE = 'railway';
     
-    console.log('Set Railway internal networking connection variables');
-    console.log('Using connection host: postgres');
+    console.log('✅ Set Railway internal networking variables');
+    console.log(`Database host changed from "${originalPgHost || '(not set)'}" to "postgres"`);
+    console.log(`Database port is now explicitly set to "${process.env.PGPORT}"`);
+    
+    // Special check for PGHOST accidentally set to PGPORT
+    if (originalPgHost && originalPgHost === originalPgPort) {
+      console.log('🔄 Fixed incorrect PGHOST value that was set to the port number');
+    }
+  }
+}
+// For Neon database (typically in development)
+else if (isNeonDb) {
+  console.log('Detected Neon database connection');
+  
+  // Set appropriate SSL mode for Neon
+  if (!process.env.PGSSLMODE) {
+    console.log('Setting SSL mode for Neon database');
+    process.env.PGSSLMODE = 'require';
   }
 }
 

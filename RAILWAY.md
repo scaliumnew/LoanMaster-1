@@ -74,36 +74,63 @@ If you encounter a 502 error or database connection issues in Railway:
 
 ### Fixing Database Connection Issues
 
-If you see `ECONNREFUSED` errors with the hostname `loanmaster-1.railway.internal` or similar:
+If you see `ECONNREFUSED` errors or `Connection terminated due to connection timeout` errors in your Railway logs:
 
-#### Option 1: Use Railway's Internal Networking (Recommended)
+#### Step 1: Ensure Your PostgreSQL Service is Named "postgres" in Railway (CRITICAL!)
 
-1. Ensure your PostgreSQL service is named `postgres` in Railway
-2. Set these environment variables in Railway:
-   ```
-   DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/railway
-   PGHOST=postgres
-   PGSSLMODE=disable
-   ```
+The most common issue is that the PostgreSQL service isn't named correctly in Railway:
 
-> If the above method doesn't work, you can try enabling SSL connection:
-> ```
-> DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/railway?sslmode=require
-> ```
-> Our application uses `{ rejectUnauthorized: false }` for SSL connections to accept Railway's self-signed certificates.
+1. Go to your Railway dashboard
+2. Look at the services in your project
+3. Find your PostgreSQL database service
+4. Make sure it's named exactly `postgres` (not "postgresql", "db", etc.)
+5. If it's named something else, rename it:
+   - Click on the service
+   - Go to Settings
+   - Change the service name to `postgres`
+   - Deploy again
 
-#### Option 2: Manual Connection Config
+#### Step 2: Configure Connection Variables
 
-If Option 1 doesn't work, try explicitly setting all database variables:
-   ```
-   DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/railway
-   PGUSER=postgres
-   PGPASSWORD=YOUR_PASSWORD
-   PGHOST=postgres
-   PGPORT=5432
-   PGDATABASE=railway
-   PGSSLMODE=disable
-   ```
+Our application is built to detect and fix most connection issues automatically, but you can also manually set these variables:
+
+```
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/railway
+PGHOST=postgres
+PGPORT=5432
+PGUSER=postgres
+PGPASSWORD=YOUR_PASSWORD
+PGDATABASE=railway
+PGSSLMODE=disable
+```
+
+#### Step 3: Check for Common Errors in Logs
+
+If you see `PGHOST : 5432` in your logs, it means the PGHOST environment variable is incorrectly set to the port number. Our application will automatically detect and fix this, but you should still check your Railway environment variables to make sure they're set correctly.
+
+#### SSL Configuration
+
+Our application uses `{ rejectUnauthorized: false }` for SSL connections to accept Railway's self-signed certificates. If you continue having issues, you can try these alternatives:
+
+- Using SSL with verification disabled:
+  ```
+  DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/railway?sslmode=disable
+  ```
+  
+- Using SSL with verification:
+  ```
+  DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/railway?sslmode=require
+  ```
+
+### Debugging Tools
+
+Our application provides several debugging tools to help diagnose database issues:
+
+1. **Debug Endpoint**: Access `/api/debug/database-config` to see detailed database configuration information
+2. **Troubleshooting Script**: Run `node scripts/railway-db-troubleshoot.js` in your Railway service's shell
+3. **Health Check**: Visit `/api/health` to verify basic database connectivity
+
+These tools will help you identify if your database is properly connected and what configuration variables are being used.
 
 The application includes robust error handling and connection retry logic specifically designed for Railway deployments. It will:
 
