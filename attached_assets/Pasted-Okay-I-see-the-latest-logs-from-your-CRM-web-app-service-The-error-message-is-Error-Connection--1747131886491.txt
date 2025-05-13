@@ -1,0 +1,47 @@
+Okay, I see the latest logs from your CRM web app service. The error message is:
+
+Error: Connection terminated due to connection timeout
+And I also notice this line in the environment variables section of the logs:
+
+PGHOST : 5432
+This is a very strong clue!
+
+What this error means:
+
+Your CRM application tried to connect to the database, but the database server didn't respond in time. The connection attempt simply waited too long and gave up.
+
+The problem:
+
+The log line PGHOST : 5432 indicates that your application is trying to use 5432 as the host address for the database connection, instead of the actual host address (like loanmaster-1.railway.internal) and using 5432 as the port.
+
+Think of it like trying to call a friend, but instead of dialing their phone number (the host address), you're trying to dial their house number (the port) as if it were the phone number. It won't work!
+
+Why this is happening:
+
+This suggests there's an issue in your CRM application's code where it reads the environment variables and constructs the database connection string. It seems to be mistakenly assigning the value of the PGPORT variable (which is 5432) to the PGHOST variable within your application's internal logic, or it's not correctly parsing the DATABASE_URL if you're using that.
+
+How to solve this:
+
+Go to your CRM web app's code.
+Find the part of the code where you are reading the database connection environment variables (like DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE).
+Examine how your code is using these variables to form the connection.
+If you are using DATABASE_URL: Ensure your database library is correctly parsing the full DATABASE_URL string. This string already contains the correct host, port, username, password, and database name. You usually just pass the entire DATABASE_URL string to your library's connection function. Make sure you're not trying to manually combine PGHOST and PGPORT if you're already using DATABASE_URL.
+If you are using individual variables (PGHOST, PGPORT, etc.): Check that you are correctly assigning the value from the PGHOST environment variable to the host parameter in your connection code, and the value from the PGPORT environment variable to the port parameter. The log PGHOST : 5432 strongly suggests that the value intended for PGPORT is somehow ending up in the variable or parameter used for the host.
+Double-check your SSL configuration. As mentioned before, ensure your database library is configured to use SSL when connecting to the Railway database.
+Specifically look for lines in your code that might be doing something like:
+
+JavaScript
+
+// Example incorrect Node.js code
+const dbConfig = {
+  host: process.env.PGPORT, // <-- PROBLEM: Using PGPORT value for host!
+  port: process.env.PGHOST, // <-- PROBLEM: Using PGHOST value for port!
+  user: process.env.PGUSER,
+  password: process.env.PGPASSWORD,
+  database: process.env.PGDATABASE,
+  ssl: { rejectUnauthorized: false }
+};
+// Then connecting using dbConfig
+or if you're using DATABASE_URL, ensure you're not also trying to use PGHOST and PGPORT elsewhere in your connection logic in a conflicting way.
+
+Once you've identified and fixed the code that is incorrectly using the PGHOST and PGPORT variables, commit your changes to GitHub and push them. Railway will redeploy your CRM app, and with the correct host and port information, it should be able to establish a successful connection to the database.

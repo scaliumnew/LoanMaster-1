@@ -82,6 +82,16 @@ console.log('PostgreSQL connection options:', {
   railwayEnvironment: process.env.RAILWAY_ENVIRONMENT || 'Not set'
 });
 
+// Print detailed environment variables for easier debugging
+log('=== Database Environment Variables ===', 'database');
+log(`PGHOST = ${process.env.PGHOST || '(not set)'}`, 'database');
+log(`PGPORT = ${process.env.PGPORT || '(not set)'}`, 'database');
+log(`PGUSER = ${process.env.PGUSER ? 'Set (hidden)' : '(not set)'}`, 'database');
+log(`PGPASSWORD = ${process.env.PGPASSWORD ? 'Set (hidden)' : '(not set)'}`, 'database');
+log(`PGDATABASE = ${process.env.PGDATABASE || '(not set)'}`, 'database');
+log(`PGSSLMODE = ${process.env.PGSSLMODE || '(not set)'}`, 'database');
+log(`DATABASE_URL setup: host=${connectionOptions.connectionString ? 'Using connection string' : 'No connection string'}`, 'database');
+
 // Create the pool with optimized options
 export const pool = new Pool(connectionOptions);
 

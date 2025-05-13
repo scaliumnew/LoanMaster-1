@@ -38,6 +38,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+  
+  // Database configuration debug endpoint
+  app.get("/api/debug/database-config", async (req: Request, res: Response) => {
+    try {
+      // Generate diagnostic info about database connection
+      const diagnostics = {
+        environment: {
+          NODE_ENV: process.env.NODE_ENV || 'not set',
+          RAILWAY_ENVIRONMENT: process.env.RAILWAY_ENVIRONMENT || 'not set',
+          RAILWAY_PRIVATE_DOMAIN: process.env.RAILWAY_PRIVATE_DOMAIN || 'not set',
+        },
+        databaseConfig: {
+          PGHOST: process.env.PGHOST || 'not set',
+          PGPORT: process.env.PGPORT || 'not set',
+          PGUSER: process.env.PGUSER ? 'set (hidden)' : 'not set',
+          PGPASSWORD: process.env.PGPASSWORD ? 'set (hidden)' : 'not set',
+          PGDATABASE: process.env.PGDATABASE || 'not set',
+          PGSSLMODE: process.env.PGSSLMODE || 'not set',
+          DATABASE_URL: process.env.DATABASE_URL ? 'set (hidden)' : 'not set'
+        },
+        serverTime: new Date().toISOString()
+      };
+      
+      // Create simple test query to check DB connection
+      let dbStatus = 'unknown';
+      let dbError = null;
+      
+      try {
+        // Test simple query
+        const clients = await storage.getClients();
+        dbStatus = 'connected';
+      } catch (err: any) {
+        dbStatus = 'error';
+        dbError = {
+          message: err.message,
+          code: err.code,
+          stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        };
+      }
+      
+      res.json({
+        ...diagnostics,
+        databaseTest: {
+          status: dbStatus,
+          error: dbError
+        },
+        message: "This endpoint is for debugging only and should be disabled in production"
+      });
+    } catch (error: any) {
+      res.status(500).json({ 
+        error: "Debug info failed", 
+        message: error.message 
+      });
+    }
+  });
 
   // Client routes
   app.get("/api/clients", async (req: Request, res: Response) => {
