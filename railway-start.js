@@ -29,16 +29,29 @@ function isProduction() {
   );
 }
 
-// Create dummy environment variables if needed
-if (!process.env.DATABASE_URL && isProduction()) {
-  console.log("WARNING: No DATABASE_URL found. Setting fallback for startup");
-  process.env.DATABASE_URL =
-    "postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@postgres.railway.internal:5432/railway";
-  process.env.PGHOST = "postgres.railway.internal";
-  process.env.PGPORT = "5432";
-  process.env.PGUSER = "postgres";
-  process.env.PGPASSWORD = "YtXeaamwlmLyWgQhjVkcMusInbHPydpB";
-  process.env.PGDATABASE = "railway";
+// Create environment variables for Railway connection
+if (isProduction()) {
+  console.log("Checking database connection for Railway...");
+  
+  // Check if we need to use Railway's internal networking
+  if (!process.env.DATABASE_URL || 
+      process.env.DATABASE_URL.includes('${{') || 
+      process.env.DATABASE_URL.includes('.railway.internal')) {
+    
+    console.log("Setting up Railway internal networking connection");
+    
+    // Use the service name "postgres" for internal networking instead of domain name
+    process.env.DATABASE_URL = "postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@postgres:5432/railway";
+    process.env.PGHOST = "postgres"; // Use service name
+    process.env.PGPORT = "5432";
+    process.env.PGUSER = "postgres";
+    process.env.PGPASSWORD = "YtXeaamwlmLyWgQhjVkcMusInbHPydpB";
+    process.env.PGDATABASE = "railway";
+    process.env.PGSSLMODE = "disable"; // Disable SSL for internal networking
+    
+    console.log("DATABASE_URL set to use Railway internal networking");
+    console.log("PGHOST set to 'postgres' for service-to-service communication");
+  }
 }
 
 // Create a fallback index.js in the dist folder if it doesn't exist

@@ -1,119 +1,130 @@
-// Railway Specific Database Setup Script
+#!/usr/bin/env node
+
+/**
+ * Railway PostgreSQL Setup Script
+ * 
+ * This script automatically configures the database connection for Railway.
+ * It runs before the main application starts to ensure proper connection.
+ */
+
+const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
-const { Pool } = require('@neondatabase/serverless');
 
-// Utility function to execute a command and return a promise
+// Utility to execute commands with promise
 function execPromise(command) {
   return new Promise((resolve, reject) => {
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Error executing command: ${command}`);
-        console.error(stderr);
-        reject(error);
-        return;
-      }
-      resolve(stdout);
-    });
+    try {
+      const output = execSync(command, { encoding: 'utf8' });
+      resolve(output);
+    } catch (error) {
+      reject(error);
+    }
   });
 }
 
-// Utility to log with timestamp
+// Utility for logging
 function log(message) {
-  console.log(`[${new Date().toISOString()}] ${message}`);
+  console.log(`[Railway DB Setup] ${message}`);
 }
 
-// Main function to run database setup
+// Main setup function
 async function setupDatabase() {
-  log('Starting Railway database setup...');
+  log('Starting Railway PostgreSQL Setup...');
   
-  // Check for DATABASE_URL
-  if (!process.env.DATABASE_URL) {
-    log('ERROR: DATABASE_URL environment variable not found.');
-    log('Make sure to set this in your Railway project variables.');
-    process.exit(1);
+  // Only run in Railway environment
+  if (!process.env.RAILWAY_ENVIRONMENT) {
+    log('Not running in Railway environment. Exiting.');
+    return;
   }
   
-  log('Database URL found in environment.');
+  log('Detected Railway environment. Checking database connection...');
   
-  // Create database connection pool
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    max: 5, // Maximum number of clients in the pool
-    idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  });
-  
-  // Test database connection
-  try {
-    log('Testing database connection...');
-    const client = await pool.connect();
-    log('Successfully connected to database.');
+  // Check if database URL is properly set
+  if (!process.env.DATABASE_URL || 
+      process.env.DATABASE_URL.includes('${{') || 
+      process.env.DATABASE_URL.includes('.railway.internal')) {
     
+    log('DATABASE_URL needs adjustment for Railway internal networking');
+    
+    // Set environment variables for internal networking
+    process.env.DATABASE_URL = 'postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@postgres:5432/railway';
+    process.env.PGHOST = 'postgres';
+    process.env.PGUSER = 'postgres';
+    process.env.PGPASSWORD = 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB';
+    process.env.PGDATABASE = 'railway';
+    process.env.PGPORT = '5432';
+    process.env.PGSSLMODE = 'disable';
+    
+    log('Set environment variables for Railway internal networking');
+    log('Using "postgres" as host for service-to-service communication');
+    
+    // Test connection with the new settings
     try {
-      // Check if tables exist
-      const { rows } = await client.query(`
+      const { Pool } = require('pg');
+      
+      // Create a test pool
+      const pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: false,
+        connectionTimeoutMillis: 10000
+      });
+      
+      // Try to connect
+      log('Testing database connection...');
+      const result = await pool.query('SELECT NOW()');
+      
+      log('Database connection successful!');
+      log(`Server time: ${result.rows[0].now}`);
+      
+      // Check for existing tables
+      const tablesResult = await pool.query(`
         SELECT table_name 
         FROM information_schema.tables 
         WHERE table_schema = 'public'
       `);
       
-      log(`Found ${rows.length} tables in database.`);
-      
-      if (rows.length === 0) {
-        log('No tables found. Initializing database schema...');
+      if (tablesResult.rows.length === 0) {
+        log('No tables found. Database needs initialization.');
         
-        // For Railway, it's better to use drizzle-kit push
+        // We need to initialize the database schema
         try {
-          log('Attempting to push schema with drizzle-kit...');
-          await execPromise('npx drizzle-kit push:pg');
-          log('Successfully pushed schema using drizzle-kit.');
-        } catch (drizzleError) {
-          log('Failed to push schema with drizzle-kit.');
-          log('Falling back to manual table creation...');
+          log('Creating database tables...');
           
-          // Path to schema files
-          const exportDir = path.join(process.cwd(), 'database-export');
-          const schemaFile = path.join(exportDir, 'schema.sql');
+          // Execute the database schema creation here, using Drizzle or running SQL scripts
+          // This depends on your project structure, but here's an example:
           
-          if (fs.existsSync(schemaFile)) {
-            log(`Found schema file at ${schemaFile}`);
-            try {
-              const schemaContent = fs.readFileSync(schemaFile, 'utf8');
-              log('Executing schema script...');
-              await client.query(schemaContent);
-              log('Schema successfully applied.');
-            } catch (sqlError) {
-              log(`Error applying schema: ${sqlError.message}`);
-              log('Database might be partially initialized.');
-            }
-          } else {
-            log('No schema file found. Database initialization may be incomplete.');
-          }
+          const schemaSQL = fs.readFileSync(path.join(__dirname, '..', 'database-export', 'schema.sql'), 'utf8');
+          
+          // Execute the schema SQL within a transaction
+          await pool.query('BEGIN');
+          await pool.query(schemaSQL);
+          await pool.query('COMMIT');
+          
+          log('Database schema created successfully!');
+        } catch (err) {
+          log(`Error creating database schema: ${err.message}`);
+          log('The application may still run, but you might need to manually initialize the database.');
         }
       } else {
-        log('Database tables already exist. No initialization needed.');
+        log(`Found ${tablesResult.rows.length} existing tables in the database.`);
       }
       
-    } finally {
-      // Release the client back to the pool
-      client.release();
+      // Everything is set up!
+      log('Database setup complete!');
+      
+    } catch (err) {
+      log(`Database connection test failed: ${err.message}`);
+      log('The application will start with limited functionality.');
+      log('You may need to manually configure the database connection in Railway.');
     }
-    
-  } catch (error) {
-    log(`Database connection failed: ${error.message}`);
-    log('Check your DATABASE_URL and make sure the database is accessible.');
-    process.exit(1);
-  } finally {
-    // End the pool
-    await pool.end();
+  } else {
+    log('DATABASE_URL is already set properly. No changes needed.');
   }
-  
-  log('Railway database setup complete.');
 }
 
 // Run the setup
-setupDatabase().catch(error => {
-  log(`Unhandled error during setup: ${error.message}`);
-  process.exit(1);
+setupDatabase().catch(err => {
+  log(`Error during database setup: ${err.message}`);
+  log('The application will continue to start, but may have limited functionality.');
 });

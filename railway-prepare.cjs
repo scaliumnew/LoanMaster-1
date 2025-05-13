@@ -85,4 +85,21 @@ if (!fs.existsSync(indexHtmlPath)) {
   `);
 }
 
+// Try to run the database setup script
+try {
+  console.log('Checking for database setup script...');
+  const dbSetupPath = path.join(__dirname, 'scripts', 'railway-db-setup.js');
+  
+  if (fs.existsSync(dbSetupPath)) {
+    console.log('Running database setup script...');
+    require('./scripts/railway-db-setup.js');
+    console.log('Database setup initiated.');
+  } else {
+    console.log('Database setup script not found. Skipping.');
+  }
+} catch (err) {
+  console.error('Error running database setup script:', err);
+  console.log('Will continue with deployment anyway.');
+}
+
 console.log('Railway deployment preparation complete');

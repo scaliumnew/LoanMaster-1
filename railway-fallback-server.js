@@ -85,21 +85,190 @@ if (!fs.existsSync(indexHtmlPath)) {
 // Serve static files from the client directory
 app.use(express.static(clientDistPath));
 
-// Health check endpoint
+// Try to connect to the database using Railway internal networking
+let dbConnectionInfo = "Not attempted";
+let dbStatus = "unknown";
+
+if (process.env.RAILWAY_ENVIRONMENT) {
+  try {
+    console.log("Attempting to connect to database using Railway internal networking...");
+    const { Pool } = require('pg');
+    
+    // Create a connection pool using the service name
+    const pool = new Pool({
+      user: 'postgres',
+      password: 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB',
+      host: 'postgres',
+      port: 5432,
+      database: 'railway',
+      ssl: false,
+      connectionTimeoutMillis: 5000
+    });
+    
+    // Try a simple query
+    pool.query('SELECT NOW()', (err, result) => {
+      if (err) {
+        console.error("Database connection test failed:", err.message);
+        dbConnectionInfo = `Connection error: ${err.message}`;
+        dbStatus = "failed";
+      } else {
+        console.log("Database connection test succeeded:", result.rows[0]);
+        dbConnectionInfo = `Connected to database. Server time: ${result.rows[0].now}`;
+        dbStatus = "connected";
+        
+        // Set environment variables for the rest of the application
+        process.env.DATABASE_URL = 'postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@postgres:5432/railway';
+        process.env.PGHOST = 'postgres';
+        process.env.PGUSER = 'postgres';
+        process.env.PGPASSWORD = 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB';
+        process.env.PGDATABASE = 'railway';
+        process.env.PGPORT = '5432';
+        process.env.PGSSLMODE = 'disable';
+      }
+    });
+  } catch (err) {
+    console.error("Error testing database connection:", err);
+    dbConnectionInfo = `Error: ${err.message}`;
+    dbStatus = "error";
+  }
+}
+
+// Health check endpoint with connection diagnostics
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'limited', 
     message: 'Service is running in fallback mode', 
-    error: 'No database connection',
+    error: 'Database connection issues',
+    databaseStatus: dbStatus,
+    databaseInfo: dbConnectionInfo,
+    envVars: {
+      railwayEnvironment: process.env.RAILWAY_ENVIRONMENT || 'Not set',
+      railwayPrivateDomain: process.env.RAILWAY_PRIVATE_DOMAIN || 'Not set',
+      databaseUrl: process.env.DATABASE_URL ? 'Set (hidden)' : 'Not set',
+      pgHost: process.env.PGHOST || 'Not set',
+      pgPort: process.env.PGPORT || 'Not set',
+      pgSslMode: process.env.PGSSLMODE || 'Not set'
+    },
     time: new Date().toISOString() 
   });
 });
 
+// Database debug endpoint
+app.get('/api/debug/database', (req, res) => {
+  const connectionTests = [];
+  
+  // Test various connection methods
+  const testHosts = [
+    { name: 'Internal service name "postgres"', host: 'postgres', port: '5432' },
+    { name: 'RAILWAY_PRIVATE_DOMAIN', host: process.env.RAILWAY_PRIVATE_DOMAIN, port: '5432' },
+    { name: 'PGHOST', host: process.env.PGHOST, port: process.env.PGPORT || '5432' },
+  ];
+  
+  // Run tests
+  let testsCompleted = 0;
+  const totalTests = testHosts.filter(h => h.host).length;
+  
+  if (totalTests === 0) {
+    return res.json({
+      status: 'error',
+      message: 'No hosts available to test',
+      environment: {
+        railwayEnvironment: process.env.RAILWAY_ENVIRONMENT || 'Not set',
+        railwayPrivateDomain: process.env.RAILWAY_PRIVATE_DOMAIN || 'Not set',
+        pgHost: process.env.PGHOST || 'Not set'
+      }
+    });
+  }
+  
+  for (const config of testHosts) {
+    if (!config.host) continue;
+    
+    try {
+      const { Pool } = require('pg');
+      const pool = new Pool({
+        user: 'postgres',
+        password: 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB',
+        host: config.host,
+        port: parseInt(config.port, 10),
+        database: 'railway',
+        ssl: false,
+        connectionTimeoutMillis: 5000
+      });
+      
+      pool.query('SELECT NOW()', (err, result) => {
+        testsCompleted++;
+        
+        if (err) {
+          connectionTests.push({
+            name: config.name,
+            host: config.host,
+            port: config.port,
+            status: 'failed',
+            error: err.message
+          });
+        } else {
+          connectionTests.push({
+            name: config.name,
+            host: config.host,
+            port: config.port,
+            status: 'success',
+            serverTime: result.rows[0].now
+          });
+        }
+        
+        // If all tests complete, send response
+        if (testsCompleted === totalTests) {
+          res.json({
+            status: 'completed',
+            tests: connectionTests,
+            environment: {
+              railwayEnvironment: process.env.RAILWAY_ENVIRONMENT || 'Not set',
+              railwayPrivateDomain: process.env.RAILWAY_PRIVATE_DOMAIN || 'Not set',
+              databaseUrl: process.env.DATABASE_URL ? 'Set (hidden)' : 'Not set',
+              pgHost: process.env.PGHOST || 'Not set',
+              pgPort: process.env.PGPORT || 'Not set'
+            },
+            systemTime: new Date().toISOString()
+          });
+        }
+      });
+    } catch (err) {
+      testsCompleted++;
+      connectionTests.push({
+        name: config.name,
+        host: config.host,
+        port: config.port,
+        status: 'error',
+        error: err.message
+      });
+      
+      // If all tests complete, send response
+      if (testsCompleted === totalTests) {
+        res.json({
+          status: 'completed',
+          tests: connectionTests,
+          environment: {
+            railwayEnvironment: process.env.RAILWAY_ENVIRONMENT || 'Not set',
+            railwayPrivateDomain: process.env.RAILWAY_PRIVATE_DOMAIN || 'Not set',
+            databaseUrl: process.env.DATABASE_URL ? 'Set (hidden)' : 'Not set',
+            pgHost: process.env.PGHOST || 'Not set',
+            pgPort: process.env.PGPORT || 'Not set'
+          },
+          systemTime: new Date().toISOString()
+        });
+      }
+    }
+  }
+});
+
 // API endpoints
 app.get('/api/*', (req, res) => {
+  if (req.path === '/api/debug/database') return; // Already handled
+  
   res.json({ 
     error: 'Database connection required',
-    message: 'This is a fallback API response. Please connect a PostgreSQL database to enable full functionality.'
+    message: 'This is a fallback API response. Please connect a PostgreSQL database to enable full functionality.',
+    help: 'Try the /api/health or /api/debug/database endpoints for diagnostics'
   });
 });
 
