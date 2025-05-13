@@ -13,6 +13,7 @@ import LoansPage from "@/pages/loans";
 import LoanDetailsPage from "@/pages/loan-details";
 import PaymentsPage from "@/pages/payments";
 import ReportsPage from "@/pages/reports";
+import SettingsPage from "@/pages/settings";
 
 function Router() {
   return (
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/loans/:id" component={LoanDetailsPage} />
       <Route path="/payments" component={PaymentsPage} />
       <Route path="/reports" component={ReportsPage} />
+      <Route path="/settings" component={SettingsPage} />
       
       {/* Fallback to 404 */}
       <Route component={NotFound} />
