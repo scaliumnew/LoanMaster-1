@@ -27,25 +27,60 @@ A comprehensive loan management system for small Non-Banking Financial Companies
 ## Setup Instructions
 
 1. Clone the repository
-```
-git clone https://github.com/yourusername/loan-management-system.git
-cd loan-management-system
+```bash
+git clone https://github.com/Scalium-Tech/Loan-Manager.git
+cd Loan-Manager
 ```
 
 2. Install dependencies
-```
+```bash
 npm install
 ```
 
-3. Set up the database
-```
-npm run db:push
+3. Configure environment variables
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env with your database credentials and other configurations
+nano .env  # or use any text editor
 ```
 
-4. Start the development server
+4. Set up the database
+```bash
+# Option 1: Start with a fresh database (schema only)
+npm run db:push
+
+# Option 2: Import existing data (if you have a database dump)
+psql your_database_name < database_dump.sql
 ```
+
+5. Start the development server
+```bash
 npm run dev
 ```
+
+## Deployment Instructions
+
+### Prerequisites
+- Node.js (v16 or newer)
+- PostgreSQL database
+- Environment variables properly configured
+
+### Production Deployment
+1. Clone the repository on your production server
+2. Install dependencies: `npm install --production`
+3. Build the client: `npm run build`
+4. Configure environment variables with production settings
+5. Start the server: `npm start`
+
+You can also deploy this application on various platforms:
+
+- **Heroku**: Use the Procfile included in the repository
+- **Railway/Render/Fly.io**: Use the deployment configuration in their respective formats
+- **Docker**: A Dockerfile is included for containerized deployment
+
+Remember to set up your PostgreSQL database separately and configure the DATABASE_URL environment variable.
 
 ## Contributing
 
