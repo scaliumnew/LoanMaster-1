@@ -1,39 +1,50 @@
-const { execSync } = require('child_process');
+// Database Initialization Script
+// This script initializes the database during deployment or first run
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const readline = require('readline');
 
-// Function to find the latest database dump
+// Path to stored exports
+const EXPORT_DIR = path.join(process.cwd(), 'database-export');
+
 function findLatestDump() {
-  const exportDir = path.join(__dirname, '..', 'database-export');
-  
-  if (!fs.existsSync(exportDir)) {
-    console.log('No database export directory found. Will use schema from drizzle instead.');
+  if (!fs.existsSync(EXPORT_DIR)) {
     return null;
   }
   
-  const files = fs.readdirSync(exportDir);
-  const fullDumps = files.filter(file => file.startsWith('full-dump-')).sort().reverse();
+  // Look for data-*.sql files and find the latest one
+  const files = fs.readdirSync(EXPORT_DIR)
+    .filter(file => file.startsWith('data-') && file.endsWith('.sql'))
+    .sort();
   
-  if (fullDumps.length === 0) {
-    console.log('No database dumps found. Will use schema from drizzle instead.');
-    return null;
-  }
-  
-  return path.join(exportDir, fullDumps[0]);
+  return files.length ? path.join(EXPORT_DIR, files[files.length - 1]) : null;
 }
 
-// Function to check if database exists and is accessible
 async function checkDatabaseAccess() {
+  if (!process.env.DATABASE_URL) {
+    console.error('ERROR: DATABASE_URL environment variable is not set!');
+    console.error('Please set it to continue with database initialization.');
+    return false;
+  }
+  
   try {
-    execSync('psql $DATABASE_URL -c "SELECT 1"', { stdio: 'ignore' });
+    // Use a simple query to test database connection
+    console.log('Testing database connection...');
+    
+    execSync(`npx drizzle-kit push:pg`, {
+      stdio: 'inherit',
+      shell: true,
+      env: { ...process.env }
+    });
+    
     return true;
   } catch (error) {
+    console.error('Failed to connect to database:', error.message);
     return false;
   }
 }
 
-// Function to prompt user
 function askQuestion(query) {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -46,52 +57,78 @@ function askQuestion(query) {
   }));
 }
 
-// Main function
 async function initDatabase() {
-  console.log('Checking database connection...');
-  
-  const dbAccessible = await checkDatabaseAccess();
-  
-  if (!dbAccessible) {
-    console.error('Cannot access database. Please check your DATABASE_URL environment variable.');
-    process.exit(1);
-  }
-  
-  console.log('Database is accessible.');
-  
-  // Check for existing database dump
-  const latestDump = findLatestDump();
-  
-  if (latestDump) {
-    console.log(`Found database dump: ${path.basename(latestDump)}`);
-    const answer = await askQuestion('Do you want to restore from this dump? (y/n) ');
-    
-    if (answer.toLowerCase() === 'y') {
-      try {
-        console.log('Restoring database from dump...');
-        execSync(`psql $DATABASE_URL < ${latestDump}`, { stdio: 'inherit' });
-        console.log('Database restored successfully!');
-        return;
-      } catch (error) {
-        console.error('Error restoring database:', error.message);
-        console.log('Falling back to schema migration...');
-      }
-    }
-  }
-  
-  // Use drizzle to push schema
-  console.log('Initializing database with drizzle schema...');
   try {
-    execSync('npm run db:push', { stdio: 'inherit' });
-    console.log('Database schema applied successfully!');
+    console.log('Starting database initialization...');
+    
+    // Check if we can connect to the database
+    const hasAccess = await checkDatabaseAccess();
+    if (!hasAccess) {
+      console.error('Unable to connect to the database. Initialization aborted.');
+      process.exit(1);
+    }
+    
+    // Check if schema.sql exists
+    const schemaFile = path.join(EXPORT_DIR, 'schema.sql');
+    
+    if (fs.existsSync(schemaFile)) {
+      console.log('Found schema.sql export, applying to database...');
+      
+      try {
+        // Apply schema
+        execSync(`psql "${process.env.DATABASE_URL}" -f "${schemaFile}"`, {
+          stdio: 'inherit',
+          shell: true
+        });
+        console.log('Schema applied successfully.');
+        
+        // Look for data files
+        const dataFile = findLatestDump();
+        if (dataFile) {
+          console.log(`Found data export: ${dataFile}`);
+          const importData = await askQuestion('Do you want to import the exported data? (y/n): ');
+          
+          if (importData.toLowerCase() === 'y') {
+            console.log('Importing data...');
+            execSync(`psql "${process.env.DATABASE_URL}" -f "${dataFile}"`, {
+              stdio: 'inherit',
+              shell: true
+            });
+            console.log('Data imported successfully.');
+          } else {
+            console.log('Data import skipped.');
+          }
+        } else {
+          console.log('No data export found.');
+        }
+      } catch (error) {
+        console.error('Failed to apply database exports:', error.message);
+        console.log('Falling back to Drizzle migration...');
+        
+        // Fallback to Drizzle
+        execSync(`npx drizzle-kit push:pg`, {
+          stdio: 'inherit',
+          shell: true,
+          env: { ...process.env }
+        });
+      }
+    } else {
+      // Use Drizzle migration as primary method
+      console.log('No schema export found, using Drizzle to initialize database...');
+      execSync(`npx drizzle-kit push:pg`, {
+        stdio: 'inherit',
+        shell: true,
+        env: { ...process.env }
+      });
+      console.log('Database schema initialized using Drizzle.');
+    }
+    
+    console.log('Database initialization complete!');
   } catch (error) {
-    console.error('Error applying database schema:', error.message);
+    console.error('Database initialization failed:', error);
     process.exit(1);
   }
 }
 
-// Run the main function
-initDatabase().catch(error => {
-  console.error('Unhandled error:', error);
-  process.exit(1);
-});
+// Run initialization
+initDatabase();

@@ -67,20 +67,91 @@ npm run dev
 - PostgreSQL database
 - Environment variables properly configured
 
-### Production Deployment
-1. Clone the repository on your production server
-2. Install dependencies: `npm install --production`
-3. Build the client: `npm run build`
-4. Configure environment variables with production settings
-5. Start the server: `npm start`
+### Database Export and Import
+
+This application includes tools to help you export your development database and import it in your production environment.
+
+#### Exporting Your Database
+Before deployment, you may want to export your database to preserve your data:
+
+```bash
+# Export database schema and data
+npm run db:export
+```
+
+This will create files in the `database-export` directory:
+- `schema.sql`: Contains your table structure
+- `data-[timestamp].sql`: Contains your current data
+
+#### Import During Deployment
+When deploying to a new environment:
+
+```bash
+# Initialize database with schema and optionally import data
+npm run db:init
+```
+
+The initialization process will:
+1. Check database connectivity
+2. Apply schema from `schema.sql` if available
+3. Offer to import the latest data export
+4. Fall back to Drizzle ORM push if needed
+
+### Production Deployment Steps
+
+1. **Prepare Your Environment**
+   ```bash
+   # Clone the repository on your production server
+   git clone https://github.com/Scalium-Tech/Loan-Manager.git
+   cd Loan-Manager
+   
+   # Copy your database export files to the database-export directory (if needed)
+   mkdir -p database-export
+   cp /path/to/your/schema.sql database-export/
+   cp /path/to/your/data.sql database-export/data-latest.sql
+   ```
+
+2. **Configure Environment**
+   ```bash
+   # Copy the example environment file and edit it
+   cp .env.example .env
+   
+   # Update DATABASE_URL and other variables for production
+   nano .env
+   ```
+
+3. **Install, Build and Start**
+   ```bash
+   # Install dependencies and initialize database
+   npm install
+   
+   # Build the client
+   npm run build
+   
+   # Start the production server
+   npm start
+   ```
+
+### Platform-Specific Deployment
 
 You can also deploy this application on various platforms:
 
-- **Heroku**: Use the Procfile included in the repository
-- **Railway/Render/Fly.io**: Use the deployment configuration in their respective formats
-- **Docker**: A Dockerfile is included for containerized deployment
+- **Heroku/Railway/Render**:
+  - Set environment variables in the platform's dashboard
+  - The included Procfile will handle startup
+  - For database: Use the platform's PostgreSQL add-on and set DATABASE_URL
 
-Remember to set up your PostgreSQL database separately and configure the DATABASE_URL environment variable.
+- **Docker Deployment**:
+  - Build using the included Dockerfile
+  - Pass environment variables using Docker environment options
+  - For database: Use a managed PostgreSQL service or deploy PostgreSQL alongside in Docker
+
+### Important Notes
+
+- Always back up your database before deployment
+- The application handles database initialization automatically on startup
+- In production, set NODE_ENV=production in your environment variables
+- Make sure your database user has sufficient privileges for table creation
 
 ## Contributing
 
