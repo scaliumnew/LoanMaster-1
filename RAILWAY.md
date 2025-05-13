@@ -86,6 +86,12 @@ If you see `ECONNREFUSED` errors with the hostname `loanmaster-1.railway.interna
    PGSSLMODE=disable
    ```
 
+> If the above method doesn't work, you can try enabling SSL connection:
+> ```
+> DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/railway?sslmode=require
+> ```
+> Our application uses `{ rejectUnauthorized: false }` for SSL connections to accept Railway's self-signed certificates.
+
 #### Option 2: Manual Connection Config
 
 If Option 1 doesn't work, try explicitly setting all database variables:

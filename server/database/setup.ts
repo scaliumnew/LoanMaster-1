@@ -65,8 +65,10 @@ const connectionOptions = {
   // Reduce pooling for dummy connections
   max: isDummyConnection ? 1 : 10,
   idleTimeoutMillis: isDummyConnection ? 1000 : 30000,
-  // Add Railway-specific options - always disable SSL for Railway direct connection
-  ssl: isRailwayDirect || process.env.PGSSLMODE === 'disable' ? false : undefined,
+  // Handle SSL properly for PostgreSQL connection
+  ssl: isRailwayDirect || process.env.PGSSLMODE === 'disable' 
+    ? false 
+    : { rejectUnauthorized: false }, // Accept self-signed certificates
   allowExitOnIdle: process.env.PG_ALLOW_EXIT_IDLE === 'true' || isRailwayDirect
 };
 

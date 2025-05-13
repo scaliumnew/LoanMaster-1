@@ -101,7 +101,7 @@ if (process.env.RAILWAY_ENVIRONMENT) {
       host: 'postgres',
       port: 5432,
       database: 'railway',
-      ssl: false,
+      ssl: { rejectUnauthorized: false }, // Accept self-signed certificates
       connectionTimeoutMillis: 5000
     });
     
@@ -191,7 +191,7 @@ app.get('/api/debug/database', (req, res) => {
         host: config.host,
         port: parseInt(config.port, 10),
         database: 'railway',
-        ssl: false,
+        ssl: { rejectUnauthorized: false }, // Accept self-signed certificates
         connectionTimeoutMillis: 5000
       });
       

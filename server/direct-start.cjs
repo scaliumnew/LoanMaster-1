@@ -69,7 +69,7 @@ if (process.env.RAILWAY_ENVIRONMENT) {
       host: 'postgres', // Use the service name "postgres"
       port: 5432,
       database: 'railway',
-      ssl: false,
+      ssl: { rejectUnauthorized: false }, // Accept self-signed certificates
       // Add connection timeout for faster failures
       connectionTimeoutMillis: 10000
     });
