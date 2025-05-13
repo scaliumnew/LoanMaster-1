@@ -51,6 +51,49 @@ app.get('/api/loans', (req, res) => {
   res.json([]);
 });
 
+// Special handler for Railway direct connection
+if (process.env.RAILWAY_ENVIRONMENT === 'production') {
+  console.log('Checking for Railway direct database connection options...');
+  
+  // Get Railway host
+  const railwayHost = process.env.RAILWAY_PRIVATE_DOMAIN;
+  
+  if (railwayHost) {
+    try {
+      console.log(`Attempting direct database connection to ${railwayHost}...`);
+      
+      // Set up direct connection
+      const { Pool } = require('pg');
+      
+      // Create connection with hardcoded credentials
+      // Replace with your actual values if needed
+      const pool = new Pool({
+        user: 'postgres',
+        password: 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB',
+        host: railwayHost,
+        port: 5432,
+        database: 'railway',
+        ssl: false
+      });
+      
+      // Test connection
+      pool.query('SELECT NOW()', (err, result) => {
+        if (err) {
+          console.error('Direct database connection failed:', err);
+        } else {
+          console.log('Direct database connection successful!', result.rows[0]);
+          
+          // Set DATABASE_URL for the rest of the application
+          process.env.DATABASE_URL = `postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@${railwayHost}:5432/railway`;
+          console.log('Set DATABASE_URL with direct connection string');
+        }
+      });
+    } catch (err) {
+      console.error('Error setting up direct database connection:', err);
+    }
+  }
+}
+
 // Fallback for all other API routes
 app.all('/api/*', (req, res) => {
   res.status(503).json({

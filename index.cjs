@@ -6,6 +6,36 @@
 // Set production mode
 process.env.NODE_ENV = 'production';
 
+// Check if we're in a Railway environment
+if (process.env.RAILWAY_ENVIRONMENT) {
+  console.log('Detected Railway environment');
+  
+  // Try direct database connection if environment variables aren't properly set
+  if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('${{')) {
+    console.log('DATABASE_URL not properly set, attempting direct connection...');
+    
+    // Check for Railway host
+    const railwayHost = process.env.RAILWAY_PRIVATE_DOMAIN;
+    
+    if (railwayHost) {
+      console.log(`Found Railway host: ${railwayHost}`);
+      // Construct the direct connection URL
+      // Replace these values with your actual credentials if needed
+      process.env.DATABASE_URL = `postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@${railwayHost}:5432/railway`;
+      process.env.PGSSLMODE = 'disable';
+      
+      // Set other PostgreSQL variables
+      process.env.PGUSER = 'postgres';
+      process.env.PGPASSWORD = 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB';
+      process.env.PGHOST = railwayHost;
+      process.env.PGPORT = '5432';
+      process.env.PGDATABASE = 'railway';
+      
+      console.log('Set direct database connection variables');
+    }
+  }
+}
+
 try {
   // Check for required directories
   const fs = require('fs');
@@ -22,6 +52,13 @@ try {
       fs.mkdirSync(dirPath, { recursive: true });
     }
   });
+  
+  // Log important environment variables (without sensitive values)
+  console.log('Environment variables:');
+  console.log('DATABASE_URL:', process.env.DATABASE_URL ? '(set)' : '(not set)');
+  console.log('PGHOST:', process.env.PGHOST || '(not set)');
+  console.log('RAILWAY_PRIVATE_DOMAIN:', process.env.RAILWAY_PRIVATE_DOMAIN || '(not set)');
+  console.log('PGSSLMODE:', process.env.PGSSLMODE || '(not set)');
   
   // Check if dist/index.js exists (built ESM app)
   const mainServerPath = path.join(__dirname, 'dist', 'index.js');

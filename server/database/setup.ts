@@ -26,25 +26,51 @@ if (!process.env.DATABASE_URL) {
 // Check if this is a dummy connection for Railway
 const isDummyConnection = process.env.DATABASE_URL?.includes('dummy:dummy@localhost');
 
+// Check if we need to use hardcoded Railway credentials
+let connectionString = process.env.DATABASE_URL;
+let isRailwayDirect = false;
+
+// For Railway deployment with direct connection
+if (process.env.RAILWAY_ENVIRONMENT === 'production' && 
+    (isDummyConnection || !connectionString || connectionString.includes('${{') || 
+     !process.env.DATABASE_URL)) {
+  
+  // Get Railway host - either from env var or fallback
+  const railwayHost = process.env.RAILWAY_PRIVATE_DOMAIN;
+  
+  if (railwayHost) {
+    log('Using direct Railway database connection', 'database');
+    
+    // Create direct connection string using Railway credentials
+    // Replace these with your actual values if needed
+    connectionString = `postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@${railwayHost}:5432/railway`;
+    isRailwayDirect = true;
+    
+    log(`Direct connection to PostgreSQL at ${railwayHost}`, 'database');
+  }
+}
+
 // Create connection options with Railway-specific optimizations
 const connectionOptions = {
-  connectionString: process.env.DATABASE_URL,
+  connectionString: connectionString,
   // Set reasonable timeouts
   connectionTimeoutMillis: isDummyConnection ? 1000 : 30000,
   // Reduce pooling for dummy connections
   max: isDummyConnection ? 1 : 10,
   idleTimeoutMillis: isDummyConnection ? 1000 : 30000,
-  // Add Railway-specific options
-  ssl: process.env.PGSSLMODE === 'disable' ? false : undefined,
-  allowExitOnIdle: process.env.PG_ALLOW_EXIT_IDLE === 'true'
+  // Add Railway-specific options - always disable SSL for Railway direct connection
+  ssl: isRailwayDirect || process.env.PGSSLMODE === 'disable' ? false : undefined,
+  allowExitOnIdle: process.env.PG_ALLOW_EXIT_IDLE === 'true' || isRailwayDirect
 };
 
 // Log connection info for debugging (without sensitive data)
 console.log('PostgreSQL connection options:', {
   ...connectionOptions,
-  connectionString: connectionOptions.connectionString ? '******' : undefined,
-  host: process.env.PGHOST ? '******' : undefined,
-  ssl: connectionOptions.ssl
+  connectionString: '******', // Never log connection string
+  directConnection: isRailwayDirect,
+  host: isRailwayDirect ? 'RAILWAY_PRIVATE_DOMAIN' : (process.env.PGHOST ? '******' : 'Not set'),
+  ssl: connectionOptions.ssl,
+  railwayEnvironment: process.env.RAILWAY_ENVIRONMENT || 'Not set'
 });
 
 // Create the pool with optimized options
