@@ -31,22 +31,29 @@ let connectionString = process.env.DATABASE_URL;
 let isRailwayDirect = false;
 
 // For Railway deployment with direct connection
-if (process.env.RAILWAY_ENVIRONMENT === 'production' && 
-    (isDummyConnection || !connectionString || connectionString.includes('${{') || 
-     !process.env.DATABASE_URL)) {
+if (process.env.RAILWAY_ENVIRONMENT) {
+  log('Running in Railway environment, checking connection options', 'database');
   
   // Get Railway host - either from env var or fallback
-  const railwayHost = process.env.RAILWAY_PRIVATE_DOMAIN;
+  const railwayPrivateDomain = process.env.RAILWAY_PRIVATE_DOMAIN;
+  const pgHost = process.env.PGHOST;
   
-  if (railwayHost) {
-    log('Using direct Railway database connection', 'database');
+  // Check if we need to use the internal Railway networking
+  if (railwayPrivateDomain && 
+      (isDummyConnection || !connectionString || connectionString.includes('${{') || 
+      !process.env.DATABASE_URL || connectionString.includes('loanmaster-1.railway.internal'))) {
     
-    // Create direct connection string using Railway credentials
-    // Replace these with your actual values if needed
-    connectionString = `postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@${railwayHost}:5432/railway`;
+    log(`Railway internal networking detected (${railwayPrivateDomain})`, 'database');
+    
+    // For Railway's internal networking, we need to use the service name
+    // The format is: postgresql://postgres:password@postgres:5432/railway
+    connectionString = 'postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@postgres:5432/railway';
     isRailwayDirect = true;
     
-    log(`Direct connection to PostgreSQL at ${railwayHost}`, 'database');
+    log('Using Railway internal networking connection: postgresql://postgres:****@postgres:5432/railway', 'database');
+    
+    // Set simplified host for internal networking
+    process.env.PGHOST = 'postgres';
   }
 }
 

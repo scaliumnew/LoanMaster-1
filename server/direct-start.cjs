@@ -52,45 +52,52 @@ app.get('/api/loans', (req, res) => {
 });
 
 // Special handler for Railway direct connection
-if (process.env.RAILWAY_ENVIRONMENT === 'production') {
-  console.log('Checking for Railway direct database connection options...');
+if (process.env.RAILWAY_ENVIRONMENT) {
+  console.log('Checking for Railway internal networking options...');
   
-  // Get Railway host
-  const railwayHost = process.env.RAILWAY_PRIVATE_DOMAIN;
-  
-  if (railwayHost) {
-    try {
-      console.log(`Attempting direct database connection to ${railwayHost}...`);
-      
-      // Set up direct connection
-      const { Pool } = require('pg');
-      
-      // Create connection with hardcoded credentials
-      // Replace with your actual values if needed
-      const pool = new Pool({
-        user: 'postgres',
-        password: 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB',
-        host: railwayHost,
-        port: 5432,
-        database: 'railway',
-        ssl: false
-      });
-      
-      // Test connection
-      pool.query('SELECT NOW()', (err, result) => {
-        if (err) {
-          console.error('Direct database connection failed:', err);
-        } else {
-          console.log('Direct database connection successful!', result.rows[0]);
-          
-          // Set DATABASE_URL for the rest of the application
-          process.env.DATABASE_URL = `postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@${railwayHost}:5432/railway`;
-          console.log('Set DATABASE_URL with direct connection string');
-        }
-      });
-    } catch (err) {
-      console.error('Error setting up direct database connection:', err);
-    }
+  try {
+    console.log('Attempting Railway internal networking connection to postgres service...');
+    
+    // Set up direct connection using internal networking
+    const { Pool } = require('pg');
+    
+    // Create connection using the internal service name "postgres"
+    // This is the recommended approach from Railway documentation
+    const pool = new Pool({
+      user: 'postgres',
+      password: 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB',
+      host: 'postgres', // Use the service name "postgres"
+      port: 5432,
+      database: 'railway',
+      ssl: false,
+      // Add connection timeout for faster failures
+      connectionTimeoutMillis: 10000
+    });
+    
+    // Test connection
+    pool.query('SELECT NOW()', (err, result) => {
+      if (err) {
+        console.error('Railway internal networking connection failed:', err);
+        console.log('Will continue with fallback server');
+      } else {
+        console.log('Railway internal networking connection successful!', result.rows[0]);
+        
+        // Set DATABASE_URL for the rest of the application
+        process.env.DATABASE_URL = 'postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@postgres:5432/railway';
+        console.log('Set DATABASE_URL with Railway internal networking connection string');
+        
+        // Also update other PostgreSQL variables
+        process.env.PGHOST = 'postgres';
+        process.env.PGUSER = 'postgres';
+        process.env.PGPASSWORD = 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB';
+        process.env.PGDATABASE = 'railway';
+        process.env.PGPORT = '5432';
+        process.env.PGSSLMODE = 'disable';
+      }
+    });
+  } catch (err) {
+    console.error('Error setting up Railway internal networking connection:', err);
+    console.log('Will continue with fallback server');
   }
 }
 

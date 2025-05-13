@@ -66,15 +66,42 @@ The application includes a health check endpoint at `/api/health` that Railway u
 
 ## Troubleshooting Railway Deployments
 
-If you encounter a 502 error in Railway:
+If you encounter a 502 error or database connection issues in Railway:
 
 1. Check the Railway logs for specific error messages
-2. Verify that the DATABASE_URL environment variable is correctly set
+2. Run the troubleshooting script: `node scripts/railway-db-troubleshoot.js`
 3. Make sure the PostgreSQL database is properly provisioned and accessible
-4. Check that the health check endpoint is responding correctly
+
+### Fixing Database Connection Issues
+
+If you see `ECONNREFUSED` errors with the hostname `loanmaster-1.railway.internal` or similar:
+
+#### Option 1: Use Railway's Internal Networking (Recommended)
+
+1. Ensure your PostgreSQL service is named `postgres` in Railway
+2. Set these environment variables in Railway:
+   ```
+   DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/railway
+   PGHOST=postgres
+   PGSSLMODE=disable
+   ```
+
+#### Option 2: Manual Connection Config
+
+If Option 1 doesn't work, try explicitly setting all database variables:
+   ```
+   DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@postgres:5432/railway
+   PGUSER=postgres
+   PGPASSWORD=YOUR_PASSWORD
+   PGHOST=postgres
+   PGPORT=5432
+   PGDATABASE=railway
+   PGSSLMODE=disable
+   ```
 
 The application includes robust error handling and connection retry logic specifically designed for Railway deployments. It will:
 
+- Try multiple connection methods (template variables, direct connection, internal networking)
 - Retry database connections with exponential backoff
 - Continue running in a degraded state if database connections fail in production
 - Log detailed error information for debugging

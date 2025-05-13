@@ -11,28 +11,29 @@ if (process.env.RAILWAY_ENVIRONMENT) {
   console.log('Detected Railway environment');
   
   // Try direct database connection if environment variables aren't properly set
-  if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('${{')) {
-    console.log('DATABASE_URL not properly set, attempting direct connection...');
+  console.log('Checking database connection configuration...');
+  
+  if (!process.env.DATABASE_URL || 
+      process.env.DATABASE_URL.includes('${{') || 
+      process.env.DATABASE_URL.includes('loanmaster-1.railway.internal')) {
     
-    // Check for Railway host
-    const railwayHost = process.env.RAILWAY_PRIVATE_DOMAIN;
+    console.log('DATABASE_URL needs special handling for Railway internal networking');
+    console.log('Current DATABASE_URL:', process.env.DATABASE_URL || '(not set)');
     
-    if (railwayHost) {
-      console.log(`Found Railway host: ${railwayHost}`);
-      // Construct the direct connection URL
-      // Replace these values with your actual credentials if needed
-      process.env.DATABASE_URL = `postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@${railwayHost}:5432/railway`;
-      process.env.PGSSLMODE = 'disable';
-      
-      // Set other PostgreSQL variables
-      process.env.PGUSER = 'postgres';
-      process.env.PGPASSWORD = 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB';
-      process.env.PGHOST = railwayHost;
-      process.env.PGPORT = '5432';
-      process.env.PGDATABASE = 'railway';
-      
-      console.log('Set direct database connection variables');
-    }
+    // Use Railway's internal networking host name "postgres" instead of domain names
+    // This follows the Railway documentation for service-to-service communication
+    process.env.DATABASE_URL = 'postgresql://postgres:YtXeaamwlmLyWgQhjVkcMusInbHPydpB@postgres:5432/railway';
+    process.env.PGSSLMODE = 'disable';
+    
+    // Set other PostgreSQL variables for internal networking
+    process.env.PGUSER = 'postgres';
+    process.env.PGPASSWORD = 'YtXeaamwlmLyWgQhjVkcMusInbHPydpB';
+    process.env.PGHOST = 'postgres'; // Use "postgres" as the host name for internal networking
+    process.env.PGPORT = '5432';
+    process.env.PGDATABASE = 'railway';
+    
+    console.log('Set Railway internal networking connection variables');
+    console.log('Using connection host: postgres');
   }
 }
 
