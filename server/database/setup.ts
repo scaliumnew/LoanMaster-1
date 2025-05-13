@@ -24,17 +24,31 @@ if (!process.env.DATABASE_URL) {
 }
 
 // Check if this is a dummy connection for Railway
-const isDummyConnection = process.env.DATABASE_URL.includes('dummy:dummy@localhost');
+const isDummyConnection = process.env.DATABASE_URL?.includes('dummy:dummy@localhost');
 
-// Create the pool with appropriate options
-export const pool = new Pool({ 
+// Create connection options with Railway-specific optimizations
+const connectionOptions = {
   connectionString: process.env.DATABASE_URL,
-  // For dummy connections, set a short connection timeout
+  // Set reasonable timeouts
   connectionTimeoutMillis: isDummyConnection ? 1000 : 30000,
   // Reduce pooling for dummy connections
   max: isDummyConnection ? 1 : 10,
-  idleTimeoutMillis: isDummyConnection ? 1000 : 30000
+  idleTimeoutMillis: isDummyConnection ? 1000 : 30000,
+  // Add Railway-specific options
+  ssl: process.env.PGSSLMODE === 'disable' ? false : undefined,
+  allowExitOnIdle: process.env.PG_ALLOW_EXIT_IDLE === 'true'
+};
+
+// Log connection info for debugging (without sensitive data)
+console.log('PostgreSQL connection options:', {
+  ...connectionOptions,
+  connectionString: connectionOptions.connectionString ? '******' : undefined,
+  host: process.env.PGHOST ? '******' : undefined,
+  ssl: connectionOptions.ssl
 });
+
+// Create the pool with optimized options
+export const pool = new Pool(connectionOptions);
 
 export const db = drizzle(pool, { schema });
 
@@ -48,6 +62,16 @@ export async function setupDatabase() {
     // Return the dummy connection objects
     return { pool, db };
   }
+  
+  // Log all PostgreSQL-related environment variables (without values)
+  log('PostgreSQL environment variables:', 'database');
+  Object.keys(process.env).filter(key => 
+    key.startsWith('PG') || 
+    key.startsWith('POSTGRES') || 
+    key === 'DATABASE_URL'
+  ).forEach(key => {
+    log(`  ${key}: ${key === 'DATABASE_URL' ? '******' : process.env[key] ? 'Set' : 'Not set'}`, 'database');
+  });
   
   let retries = 5;
   let lastError = null;
