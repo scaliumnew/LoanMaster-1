@@ -1,1 +1,1 @@
-web: node railway-start.js
+web: node index.cjs
