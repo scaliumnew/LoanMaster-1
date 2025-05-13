@@ -26,12 +26,40 @@ if (!process.env.DATABASE_URL) {
 // Check if this is a dummy connection for Railway
 const isDummyConnection = process.env.DATABASE_URL?.includes('dummy:dummy@localhost');
 
+// Detect specific database types
+const isRailwayProxy = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('crossover.proxy.rlwy.net');
+const isNeonDb = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('.neon.tech');
+
 // Check if we need to use hardcoded Railway credentials
 let connectionString = process.env.DATABASE_URL;
 let isRailwayDirect = false;
+let isRailwayProxyConn = false;
 
+// Log the database connection type we detected
+log(`Database environment detection:`, 'database');
+log(`  isRailwayProxy: ${isRailwayProxy}`, 'database');
+log(`  isNeonDatabase: ${isNeonDb}`, 'database');
+log(`  isDummyConnection: ${isDummyConnection}`, 'database');
+log(`  RAILWAY_ENVIRONMENT: ${process.env.RAILWAY_ENVIRONMENT || '(not set)'}`, 'database');
+
+// Handle Railway proxy connection (crossover.proxy.rlwy.net)
+if (isRailwayProxy) {
+  log('Using Railway proxy connection (crossover.proxy.rlwy.net)', 'database');
+  log(`DATABASE_URL: Using proxy URL (hidden for security)`, 'database');
+  
+  // Keep the connection string as is, but ensure we use SSL
+  isRailwayProxyConn = true;
+  
+  // Extract hostname and port from URL for logging
+  try {
+    const url = new URL(connectionString);
+    log(`Host: ${url.hostname}, Port: ${url.port}`, 'database');
+  } catch (err) {
+    log(`Error parsing DATABASE_URL: ${err instanceof Error ? err.message : 'Unknown error'}`, 'database');
+  }
+} 
 // For Railway deployment with direct connection
-if (process.env.RAILWAY_ENVIRONMENT) {
+else if (process.env.RAILWAY_ENVIRONMENT) {
   log('Running in Railway environment, checking connection options', 'database');
   
   // Get Railway host - either from env var or fallback
@@ -41,7 +69,7 @@ if (process.env.RAILWAY_ENVIRONMENT) {
   // Check if we need to use the internal Railway networking
   if (railwayPrivateDomain && 
       (isDummyConnection || !connectionString || connectionString.includes('${{') || 
-      !process.env.DATABASE_URL || connectionString.includes('loanmaster-1.railway.internal'))) {
+      !process.env.DATABASE_URL || connectionString.includes('.railway.internal'))) {
     
     log(`Railway internal networking detected (${railwayPrivateDomain})`, 'database');
     
@@ -57,6 +85,26 @@ if (process.env.RAILWAY_ENVIRONMENT) {
   }
 }
 
+// Configure SSL based on connection type
+let sslConfig;
+if (isRailwayDirect || process.env.PGSSLMODE === 'disable') {
+  // For internal networking, no SSL needed
+  sslConfig = false;
+  log('SSL disabled for internal networking', 'database');
+} else if (isRailwayProxy) {
+  // For Railway proxy, use SSL but accept self-signed certs
+  sslConfig = { rejectUnauthorized: false };
+  log('SSL enabled for Railway proxy (accepting self-signed certificates)', 'database');
+} else if (isNeonDb) {
+  // For Neon, use standard SSL
+  sslConfig = true;
+  log('SSL enabled for Neon database', 'database');
+} else {
+  // Default - accept self-signed certs
+  sslConfig = { rejectUnauthorized: false };
+  log('SSL enabled with rejectUnauthorized=false (default)', 'database');
+}
+
 // Create connection options with Railway-specific optimizations
 const connectionOptions = {
   connectionString: connectionString,
@@ -66,9 +114,7 @@ const connectionOptions = {
   max: isDummyConnection ? 1 : 10,
   idleTimeoutMillis: isDummyConnection ? 1000 : 30000,
   // Handle SSL properly for PostgreSQL connection
-  ssl: isRailwayDirect || process.env.PGSSLMODE === 'disable' 
-    ? false 
-    : { rejectUnauthorized: false }, // Accept self-signed certificates
+  ssl: sslConfig,
   allowExitOnIdle: process.env.PG_ALLOW_EXIT_IDLE === 'true' || isRailwayDirect
 };
 
@@ -76,9 +122,14 @@ const connectionOptions = {
 console.log('PostgreSQL connection options:', {
   ...connectionOptions,
   connectionString: '******', // Never log connection string
-  directConnection: isRailwayDirect,
-  host: isRailwayDirect ? 'RAILWAY_PRIVATE_DOMAIN' : (process.env.PGHOST ? '******' : 'Not set'),
-  ssl: connectionOptions.ssl,
+  connectionType: isRailwayProxy ? 'Railway Proxy' : 
+                  isRailwayDirect ? 'Railway Internal' : 
+                  isNeonDb ? 'Neon Database' : 
+                  'Standard PostgreSQL',
+  host: isRailwayProxy ? 'crossover.proxy.rlwy.net' : 
+        isRailwayDirect ? 'postgres' : 
+        (process.env.PGHOST ? '******' : 'Not set'),
+  ssl: sslConfig ? (typeof sslConfig === 'object' ? 'Custom SSL Config' : 'Enabled') : 'Disabled',
   railwayEnvironment: process.env.RAILWAY_ENVIRONMENT || 'Not set'
 });
 

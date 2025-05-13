@@ -9,13 +9,36 @@ This document provides instructions for deploying the Loan Management System on 
 
 ## Environment Variables
 
-The following environment variables need to be set in Railway:
+The following environment variables should be set in Railway:
 
 ```
 NODE_ENV=production
 RAILWAY_ENVIRONMENT=production
-DATABASE_URL=postgresql://username:password@hostname:port/database_name
 ```
+
+For the database connection, Railway provides multiple options:
+
+### Option 1: Use Railway's Auto-linking (Recommended)
+
+When you add a PostgreSQL service to your project, Railway automatically sets up the necessary environment variables. Our application is built to detect and use these automatically.
+
+### Option 2: Use Railway's Proxy Connection (Reliable)
+
+Railway provides a proxy connection URL that you can manually set:
+
+```
+DATABASE_URL=postgresql://postgres:PASSWORD@crossover.proxy.rlwy.net:PORT/railway
+```
+
+This is the most reliable method as it works consistently across deployments. You can find this connection string in your Railway PostgreSQL service details.
+
+### Option 3: Use Template Variables
+
+```
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+```
+
+While convenient, template variables sometimes fail to resolve correctly. Our application includes fallback mechanisms if this happens.
 
 ## Deployment Steps
 

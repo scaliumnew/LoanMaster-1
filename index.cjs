@@ -32,9 +32,41 @@ console.log('Database environment detection:', {
   PGPORT: process.env.PGPORT || '(not set)'
 });
 
-// For Railway environment
-if (isRailwayEnv || hasRailwayHost) {
-  console.log('Setting up for Railway deployment');
+// Special detection for Railway proxy URLs
+const isRailwayProxy = process.env.DATABASE_URL && process.env.DATABASE_URL.includes('crossover.proxy.rlwy.net');
+
+// For Railway environment using proxy (new format)
+if (isRailwayProxy) {
+  console.log('✅ Detected Railway proxy connection URL');
+  console.log('Using provided Railway proxy connection string');
+  
+  // Parse the connection string to get individual components
+  try {
+    const connectionUrl = new URL(process.env.DATABASE_URL);
+    const host = connectionUrl.hostname;
+    const port = connectionUrl.port;
+    const user = connectionUrl.username;
+    const password = connectionUrl.password;
+    const database = connectionUrl.pathname.substring(1); // Remove leading /
+    
+    // Set individual PG* variables to be consistent with the URL
+    process.env.PGUSER = user;
+    process.env.PGPASSWORD = password;
+    process.env.PGHOST = host;
+    process.env.PGPORT = port;
+    process.env.PGDATABASE = database;
+    // For Railway proxy, we need SSL
+    process.env.PGSSLMODE = 'require';
+    
+    console.log('✅ Set individual connection variables from Railway proxy URL');
+    console.log(`Database host: ${host}, port: ${port}, database: ${database}`);
+  } catch (err) {
+    console.error('Error parsing DATABASE_URL:', err.message);
+  }
+}
+// For Railway environment using internal networking
+else if (isRailwayEnv || hasRailwayHost) {
+  console.log('Setting up for Railway deployment using internal networking');
   
   // Check if we need to fix the connection string
   if (hasTemplateVars || hasRailwayHost || !process.env.DATABASE_URL || 
