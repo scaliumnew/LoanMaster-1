@@ -15,6 +15,30 @@ import {
 import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Health check endpoint for Railway.com
+  app.get("/api/health", async (req: Request, res: Response) => {
+    try {
+      // Perform a simple database query to verify connection
+      const clientCount = await storage.getClients().then(clients => clients.length);
+      res.json({ 
+        status: "ok", 
+        database: "connected",
+        timestamp: new Date().toISOString(),
+        metrics: {
+          clients: clientCount
+        }
+      });
+    } catch (error) {
+      console.error("Health check failed:", error);
+      res.status(500).json({ 
+        status: "error", 
+        database: "disconnected",
+        message: "Database connection failed",
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // Client routes
   app.get("/api/clients", async (req: Request, res: Response) => {
     const clients = await storage.getClients();

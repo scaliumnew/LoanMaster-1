@@ -52,9 +52,33 @@ app.use((req, res, next) => {
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isRailway = process.env.RAILWAY_ENVIRONMENT === 'production';
 
-    res.status(status).json({ message });
-    throw err;
+    // Log the error for debugging
+    console.error("API Error:", {
+      status,
+      message,
+      stack: err.stack,
+      path: _req.path,
+      method: _req.method
+    });
+
+    // Send an appropriate response to the client
+    res.status(status).json({ 
+      message: isProduction ? "An error occurred" : message,
+      // Only include detailed error info in non-production
+      ...(isProduction ? {} : { 
+        error: err.name, 
+        path: _req.path,
+        timestamp: new Date().toISOString()
+      })
+    });
+
+    // Don't crash the server in production, especially on Railway
+    if (!isProduction && !isRailway) {
+      throw err;
+    }
   });
 
   // importantly only setup vite in development and after

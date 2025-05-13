@@ -26,70 +26,147 @@ export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle(pool, { schema });
 
 export async function setupDatabase() {
-  try {
-    log('Initializing database connection...', 'database');
-    
-    // Test database connection
-    const client = await pool.connect();
+  let retries = 5;
+  let lastError = null;
+  
+  while (retries > 0) {
     try {
-      log('Database connection successful', 'database');
+      log(`Initializing database connection (attempts remaining: ${retries})...`, 'database');
       
-      // Check if any tables exist
-      const { rows } = await client.query(`
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public'
-      `);
+      // Test database connection with timeout
+      const client = await Promise.race([
+        pool.connect(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Database connection timeout')), 10000)
+        )
+      ]) as any;
       
-      if (rows.length === 0) {
-        log('No tables found in database, initializing schema...', 'database');
-        // Initialize database schema using Drizzle
-        await initializeSchema();
-      } else {
-        log(`Database already contains ${rows.length} tables`, 'database');
+      try {
+        log('Database connection successful', 'database');
+        
+        // Check if any tables exist
+        const { rows } = await client.query(`
+          SELECT table_name 
+          FROM information_schema.tables 
+          WHERE table_schema = 'public'
+        `);
+        
+        if (rows.length === 0) {
+          log('No tables found in database, initializing schema...', 'database');
+          // Initialize database schema using Drizzle
+          await initializeSchema();
+        } else {
+          log(`Database already contains ${rows.length} tables`, 'database');
+        }
+        
+        // Successfully connected and initialized
+        return { pool, db };
+      } finally {
+        client.release();
       }
-    } finally {
-      client.release();
+    } catch (error) {
+      lastError = error;
+      console.error(`Database connection attempt failed (${retries} attempts remaining):`, error);
+      
+      // Decrease retry counter
+      retries--;
+      
+      if (retries > 0) {
+        // Wait before next attempt - exponential backoff
+        const delay = Math.pow(2, 5 - retries) * 1000;
+        log(`Retrying database connection in ${delay/1000} seconds...`, 'database');
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
-    
+  }
+  
+  // If we reach here, all retries failed
+  console.error('All database connection attempts failed:', lastError);
+  
+  // For Railway deployment - don't crash the app, but log the error
+  if (process.env.RAILWAY_ENVIRONMENT === 'production') {
+    console.error('Running in production mode on Railway - continuing despite database errors');
     return { pool, db };
-  } catch (error) {
-    console.error('Failed to initialize database:', error);
-    throw error;
+  } else {
+    throw lastError;
   }
 }
 
 async function initializeSchema() {
   try {
-    // Check if we have a SQL dump to use
-    const schemaPath = path.join(DB_EXPORT_DIR, 'schema.sql');
-    if (fs.existsSync(schemaPath)) {
-      log('Found schema.sql, applying to database...', 'database');
-      // We would need to read and execute the SQL directly
-      // This is challenging in serverless environments
-      // Let's fall back to Drizzle
-    }
-    
     // Use drizzle to push schema (this is safer)
     log('Pushing database schema using drizzle...', 'database');
     
-    // We'll use basic table creation from our schema
-    // Extract table creation SQL from the schema
-    const tablesSQL = generateTablesSQLFromSchema();
+    // For Railway deployments, we'll use a transaction to ensure all or nothing
+    const client = await pool.connect();
     
-    // Execute the SQL
-    for (const sql of tablesSQL) {
-      try {
-        await pool.query(sql);
-      } catch (error) {
-        console.error(`Error executing SQL: ${sql}`, error);
+    try {
+      // Start transaction
+      await client.query('BEGIN');
+      
+      // Extract table creation SQL from the schema
+      const tablesSQL = generateTablesSQLFromSchema();
+      
+      // Execute each SQL statement within the transaction
+      for (const sql of tablesSQL) {
+        try {
+          await client.query(sql);
+          log(`Successfully executed: ${sql.substring(0, 50)}...`, 'database');
+        } catch (error: any) {
+          console.error(`Error executing SQL: ${sql}`, error);
+          // Don't throw yet, but collect errors
+          if (error.code === '42P07') {
+            // Error code for "relation already exists"
+            log(`Table already exists, continuing...`, 'database');
+          } else {
+            // For other errors, we'll roll back
+            throw error;
+          }
+        }
       }
+      
+      // Commit the transaction if we got here
+      await client.query('COMMIT');
+      log('Database schema initialized successfully', 'database');
+      
+    } catch (error) {
+      // Something went wrong, roll back
+      await client.query('ROLLBACK');
+      console.error('Transaction rolled back due to error:', error);
+      
+      // Try individual statements without transaction if we're on Railway
+      if (process.env.RAILWAY_ENVIRONMENT === 'production') {
+        log('Retrying schema creation without transaction...', 'database');
+        // Just try to create each table individually
+        const tablesSQL = generateTablesSQLFromSchema();
+        for (const sql of tablesSQL) {
+          try {
+            await pool.query(sql);
+          } catch (err: any) {
+            // Log but don't fail on table exists errors
+            if (err.code === '42P07') {
+              log(`Table already exists, continuing...`, 'database');
+            } else {
+              console.error(`Error creating table: ${err.message || 'Unknown error'}`);
+            }
+          }
+        }
+      } else {
+        throw error;
+      }
+    } finally {
+      client.release();
     }
     
-    log('Database schema initialized successfully', 'database');
   } catch (error) {
     console.error('Error initializing database schema:', error);
-    throw error;
+    
+    // Don't crash in Railway environment
+    if (process.env.RAILWAY_ENVIRONMENT === 'production') {
+      console.error('Continuing despite schema initialization errors in Railway environment');
+    } else {
+      throw error;
+    }
   }
 }
 
