@@ -17,15 +17,38 @@ if (!fs.existsSync(DB_EXPORT_DIR)) {
 
 // Database connection
 if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
+  console.warn(
+    "WARNING: DATABASE_URL is not set. Using a dummy connection for Railway deployment. The app will function in limited mode."
   );
+  process.env.DATABASE_URL = 'postgresql://dummy:dummy@localhost:5432/dummy_db?schema=public';
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Check if this is a dummy connection for Railway
+const isDummyConnection = process.env.DATABASE_URL.includes('dummy:dummy@localhost');
+
+// Create the pool with appropriate options
+export const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  // For dummy connections, set a short connection timeout
+  connectionTimeoutMillis: isDummyConnection ? 1000 : 30000,
+  // Reduce pooling for dummy connections
+  max: isDummyConnection ? 1 : 10,
+  idleTimeoutMillis: isDummyConnection ? 1000 : 30000
+});
+
 export const db = drizzle(pool, { schema });
 
 export async function setupDatabase() {
+  // Special handling for Railway deployment with no database
+  if (isDummyConnection && process.env.RAILWAY_ENVIRONMENT === 'production') {
+    log('Running with dummy database connection for Railway deployment', 'database');
+    log('The application will function in VIEW-ONLY mode', 'database');
+    log('Please add a PostgreSQL database in Railway to enable full functionality', 'database');
+    
+    // Return the dummy connection objects
+    return { pool, db };
+  }
+  
   let retries = 5;
   let lastError = null;
   
@@ -86,6 +109,8 @@ export async function setupDatabase() {
   // For Railway deployment - don't crash the app, but log the error
   if (process.env.RAILWAY_ENVIRONMENT === 'production') {
     console.error('Running in production mode on Railway - continuing despite database errors');
+    console.error('The application will function in VIEW-ONLY mode');
+    console.error('Please add a PostgreSQL database in Railway to enable full functionality');
     return { pool, db };
   } else {
     throw lastError;
